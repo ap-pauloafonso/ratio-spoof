@@ -7,12 +7,15 @@ import random
 import base64
 import os
 import uuid
+import argparse
+import time
+
 
 def t_total_size(data):
     return sum(map(lambda x : x['length'] , data['info']['files']))
 
-def t_infohash_urlencoded(data):
-    info_offsets= result['info']['byte_offsets']
+def t_infohash_urlencoded(data, raw_data):
+    info_offsets= data['info']['byte_offsets']
     info_bytes = hashlib.sha1(raw_data[info_offsets[0]:info_offsets[1]]).digest()
     return urllib.parse.quote(info_bytes).lower()
 
@@ -28,35 +31,40 @@ def next_announce_total_b(kb_speed, b_current, b_piece_size,s_time, b_total_limi
         return b_total_limit    
     return next_announce
 
-def next_announce_left_b(b_next_total, b_total_size):
-    return b_total_size - b_next_total
+def next_announce_left_b(b_current, b_total_size):
+    return b_total_size - b_current
 
 
 def peer_id():
     peer_id =  f'-qB4030-{base64.urlsafe_b64encode(uuid.uuid4().bytes)[:12].decode()}'
     return peer_id
 
-  
+def find_approx_current(b_total_size, piece_size, percent):
+    if( percent <= 0): return 0
+    total = (percent/100) * b_total_size
+    current_approx = int(total / piece_size) * piece_size
+    return current_approx
 
 
-
-with open(sys.argv[1], 'rb') as f: 
+def read_file(f, args_downalod, args_upload):
     raw_data = f.read()
     result = bencode_parser.decode(raw_data)
     piece_size = t_piecesize_b(result)
-    total_size = t_total_size(result)
-    current  = piece_size
-    while current < total_size:
-        current = next_announce_total_b(50, current, piece_size, 1800, total_size)
-        print(f'current: {current},  {int(current/piece_size)}/{int(total_size/piece_size)}')
-    print(len(peer_id()))
-   # print(t_infohash_urlencoded(result))
-   
-   # offsets =data['info']['byte_offsets']
-    #info_hash = hashlib.sha1(raw_data[offsets[0]: offsets[1]]).hexdigest()
-   # sha1_hash =hashlib.sha1(raw_data[offsets[0]: offsets[1]])
-    #test  = hashlib.sha1(raw_data[offsets[0]: offsets[1]]).digest()
-    #print(data['announce'])
-    #print(urllib.parse.quote(test).lower())
+    total_size = t_total_size(result) 
+    current_downloaded = find_approx_current(total_size,piece_size,args_downalod[0])
+    current_uploaded = find_approx_current(total_size,piece_size,args_upload[0])
+    delay_announce =1800
+    print(total_size)
+    while True:
+        if(current_downloaded < total_size):
+            current_downloaded = next_announce_total_b(args_downalod[1],current_downloaded, piece_size, delay_announce, total_size)
+        current_uploaded = next_announce_total_b(args_upload[1],current_uploaded, piece_size, delay_announce)
+        print(f'currentDownload: {current_downloaded} | left: {next_announce_left_b(current_downloaded, total_size)}| currentUpload: {current_uploaded}')
+        time.sleep(1)
 
-
+parser = argparse.ArgumentParser()
+parser.add_argument('-t', required=True,help='path .torrent file' , type=argparse.FileType('rb'))
+parser.add_argument('-d', required=True,type=int,help='parms for download', nargs=2 ,metavar=('%_COMPLETE', 'KBS_SPEED'))
+parser.add_argument('-u',required=True,type=int,help='parms for upload', nargs=2 ,metavar=('%_COMPLETE', 'KBS_SPEED'))
+args = parser.parse_args()
+read_file(args.t, args.d, args.u)
