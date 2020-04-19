@@ -55,6 +55,7 @@ def read_file(f, args_downalod, args_upload):
     current_uploaded = find_approx_current(total_size,piece_size,args_upload[0])
     delay_announce =1800
     print(total_size)
+    print(t_infohash_urlencoded(result, raw_data))
     while True:
         if(current_downloaded < total_size):
             current_downloaded = next_announce_total_b(args_downalod[1],current_downloaded, piece_size, delay_announce, total_size)
