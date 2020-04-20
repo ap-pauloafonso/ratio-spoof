@@ -9,6 +9,11 @@ import os
 import uuid
 import argparse
 import time
+from collections import deque
+import subprocess
+import platform
+import datetime
+
 
 
 def t_total_size(data):
@@ -45,6 +50,26 @@ def find_approx_current(b_total_size, piece_size, percent):
     current_approx = int(total / piece_size) * piece_size
     return current_approx
 
+def print_header(torrent_name, percent_complete, download_speed, upload_speed):
+    sys.stdout.write(f"""
+###########################################################################
+    Torrent: {torrent_name} - {percent_complete}% 
+    download_speed: {download_speed}KB/s 
+    upload_speed: {upload_speed}KB/s
+###########################################################################
+"""
+    )
+
+def print_body(d: deque, time):
+    for item in list(d)[:len(d)-1]:
+        print(f'#{item["count"]} downloaded: {item["downloaded"]}  | uploaded: {item["uploaded"]} | announced')
+    print(f'#{d[-1]["count"]} downloaded: {d[-1]["downloaded"]}  | uploaded: {d[-1]["uploaded"]} | next announce in :{str(datetime.timedelta(seconds=time))}')
+
+def clear_screen():
+    if platform.system() == "Windows":
+        subprocess.Popen("cls", shell=True).communicate()
+    else:
+        print("\033c", end="")
 
 def read_file(f, args_downalod, args_upload):
     raw_data = f.read()
@@ -53,15 +78,23 @@ def read_file(f, args_downalod, args_upload):
     total_size = t_total_size(result) 
     current_downloaded = find_approx_current(total_size,piece_size,args_downalod[0])
     current_uploaded = find_approx_current(total_size,piece_size,args_upload[0])
-    delay_announce =1800
-    print(total_size)
-    print(t_infohash_urlencoded(result, raw_data))
+    delay_announce =18000
+    deq = deque(maxlen=10)
+    count = 1
     while True:
         if(current_downloaded < total_size):
             current_downloaded = next_announce_total_b(args_downalod[1],current_downloaded, piece_size, delay_announce, total_size)
         current_uploaded = next_announce_total_b(args_upload[1],current_uploaded, piece_size, delay_announce)
-        print(f'currentDownload: {current_downloaded} | left: {next_announce_left_b(current_downloaded, total_size)}| currentUpload: {current_uploaded}')
+        deq.append({'count': count, 'downloaded':current_downloaded,'uploaded':current_uploaded })
+        count +=1
+        clear_screen()
+        print_header(result['info']['name'], args_downalod[0], args_downalod[1], args_upload[1])
+        print_body(deq, delay_announce)
+        delay_announce = delay_announce - 1 if delay_announce > 0 else 0
         time.sleep(1)
+
+        
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', required=True,help='path .torrent file' , type=argparse.FileType('rb'))
