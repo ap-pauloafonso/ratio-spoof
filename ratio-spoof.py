@@ -16,6 +16,7 @@ import datetime
 import threading
 import urllib.request
 import http.client
+import logging
 
 
 def human_readable_size(size, decimal_places=2):
@@ -51,8 +52,9 @@ class RatioSpoofState():
         self.info_hash_urlencoded = info_hash_urlencoded
         self.announce_history_deq = deque(maxlen=10)
         self.deq_count = 0
+        self.numwant = 200
         self.__add_announce(current_downloaded, current_uploaded ,next_announce_left_b(current_downloaded, total_size))
-        #threading.Thread(target = (lambda: self.__print_state())).start()
+        threading.Thread(target = (lambda: self.__print_state())).start()
         threading.Thread(target = (lambda: self.__decrease_timer())).start()
 
 
@@ -65,6 +67,8 @@ class RatioSpoofState():
         current_downloaded = self.announce_history_deq[-1]['downloaded'] 
         if(self.announce_history_deq[-1]['downloaded'] < self.total_size):
             current_downloaded = next_announce_total_b(self.download_speed,self.announce_history_deq[-1]['downloaded'], self.piece_size, self.announce_rate, self.total_size)
+        else: 
+            self.numwant = 0
         current_uploaded = next_announce_total_b(self.upload_speed,self.announce_history_deq[-1]['uploaded'], self.piece_size, self.announce_rate)
         current_left  = next_announce_left_b(current_downloaded, self.total_size)
         self.__add_announce(current_downloaded,current_uploaded,current_left)
@@ -72,25 +76,18 @@ class RatioSpoofState():
     def announce(self, event = None):
         last_announce_data = self.announce_history_deq[-1]
         query_dict  = build_query_string(self, last_announce_data, event)
-        success = False
-        print(len(self.announce_info['list_of_lists']))
+
+
         if (len(self.announce_info['list_of_lists']) > 0):
             for tier_list in self.announce_info['list_of_lists']:
                 for item in tier_list:
-                    print(item)
-                    return tracker_announce_request(item, query_dict)
-                    success = True
-                    break
-                    
+                    return tracker_announce_request(item, query_dict)            
                 
         else:
             url = self.announce_info['main']
-            ret = tracker_announce_request(url, query_dict)
-            success = True
-            return ret
-        
-        print('passou por aqui 22')
-        if success == False : raise Exception('Connection error with the tracker')
+            return tracker_announce_request(url, query_dict)
+
+        raise Exception('Connection error with the tracker')
 
     def __decrease_timer(self):
         while True:
@@ -136,7 +133,7 @@ def t_piecesize_b(data):
 def next_announce_total_b(kb_speed, b_current, b_piece_size,s_time, b_total_limit = None):
     total = b_current + (kb_speed *1024 *s_time)
     closest_piece_number = int(total / b_piece_size)
-    closest_piece_number = closest_piece_number + random.randint(-10,10)
+    closest_piece_number = closest_piece_number + random.randint(1,10)
     next_announce = closest_piece_number *b_piece_size
     if(b_total_limit is not None and next_announce > b_total_limit):
         return b_total_limit    
@@ -168,32 +165,33 @@ def build_announce_info(data):
         raise Exception('No tcp/http tracker url found')
     return announce_info
 
-def tracker_announce_request(url, query_dict):
-    request = urllib.request.Request(url = f'{url}?{urllib.parse.urlencode(query_dict)}', headers= {'User-Agent' :'qBittorrent/4.0.3', 'Accept-Encoding':'gzip'})
-    print(request.full_url)
-    print('tool')
-    return 30
-    #response = urllib.request.urlopen(request)
-    #return response.read()
+def tracker_announce_request(url, query_string):
+    request = urllib.request.Request(url = f'{url}?{query_string}', headers= {'User-Agent' :'qBittorrent/4.0.3', 'Accept-Encoding':'gzip'})	
+    response = urllib.request.urlopen(request).read()
+    decoded_response  =  bencode_parser.decode(response)
+    return decoded_response['interval']
+
 
 def build_query_string(state:RatioSpoofState, curent_info, event):    
     query = {
-    'info_hash': state.info_hash_urlencoded,
     'peer_id':state.peer_id,
-    'port':str(8999),
-    'uploaded':str(curent_info['uploaded']),
-    'downloaded':str(curent_info['downloaded']),
-    'left':str(curent_info['left']),
-    'corrupt': str(0),
-    'key':str(state.key),
+    'port':8999,
+    'uploaded':curent_info['uploaded'],
+    'downloaded':curent_info['downloaded'],
+    'left':curent_info['left'],
+    'corrupt': 0,
+    'key':state.key,
     'event':event,
-    'numwant':str(200),
-    'compact':str(1),
-    'no_peer_id': str(1),
-    'supportcrypto':str(1),
-    'redundant':str(0)
+    'numwant':state.numwant,
+    'compact':1,
+    'no_peer_id': 1,
+    'supportcrypto':1,
+    'redundant':0
     }
-    return urllib.parse.quote_plus(json.dumps(query))
+
+    if(event == None):
+        del(query['event'])
+    return  f'info_hash={state.info_hash_urlencoded}&' + urllib.parse.urlencode(query)
 
 
 
@@ -230,8 +228,6 @@ def read_file(f, args_downalod, args_upload):
         
         """
 
-        
-http.client.HTTPConnection.debuglevel = 1
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', required=True, metavar=('(TORRENT_PATH)'), help='path .torrent file' , type=argparse.FileType('rb'))
