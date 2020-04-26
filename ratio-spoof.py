@@ -18,6 +18,7 @@ import threading
 import urllib.request
 import http.client
 import gzip
+import shutil
 
 
 
@@ -27,7 +28,6 @@ class RatioSpoofState():
                     piece_size, total_size, announce_info, info_hash_urlencoded):
         self.__lock =  threading.Lock()
         self.torrent_name = torrent_name
-        self.percent_complete = round(current_downloaded / total_size)
         self.download_speed = download_speed
         self.upload_speed = upload_speed
         self.announce_rate = announce_rate
@@ -102,20 +102,22 @@ class RatioSpoofState():
     
     def __print_state(self):
         while True:
+            print('  RATIO-SPOOF  '.center(shutil.get_terminal_size().columns,'#'))
             print(f"""
-            ###########################################################################
-            Torrent: {self.torrent_name} - {self.percent_complete}% 
-            download_speed: {self.download_speed}KB/s 
-            upload_speed: {self.upload_speed}KB/s
-            size: {human_readable_size(self.total_size)}
-            ###########################################################################
+            Torrent: {self.torrent_name}
+            Tracker:{self.announce_info['main']}
+            Download Speed: {self.download_speed}KB/s 
+            Upload Speed: {self.upload_speed}KB/s
+            Size: {human_readable_size(self.total_size)}
             """)
+            print('  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  '.center(shutil.get_terminal_size().columns, '#'))
+            print()
             for item in list(self.announce_history_deq)[:len(self.announce_history_deq)-1]:
-                print(f'#{item["count"]} downloaded: {human_readable_size(item["downloaded"])} ({item["percent"]}%)| left: {human_readable_size(item["left"])}  | uploaded: {human_readable_size(item["uploaded"])} | announced')
-            print(f'#{self.announce_history_deq[-1]["count"]} downloaded: {human_readable_size(self.announce_history_deq[-1]["downloaded"])} ({self.announce_history_deq[-1]["percent"]}%) | left: {human_readable_size(self.announce_history_deq[-1]["left"])}   | uploaded: {human_readable_size(self.announce_history_deq[-1]["uploaded"])} | next announce in :{str(datetime.timedelta(seconds=self.announce_current_timer))}')
-            clear_screen()
+                print(f'#{item["count"]} downloaded: {human_readable_size(item["downloaded"])}({item["percent"]}%) | left: {human_readable_size(item["left"])} | uploaded: {human_readable_size(item["uploaded"])} | announced')
+            print(f'#{self.announce_history_deq[-1]["count"]} downloaded: {human_readable_size(self.announce_history_deq[-1]["downloaded"])}({self.announce_history_deq[-1]["percent"]}%) | left: {human_readable_size(self.announce_history_deq[-1]["left"])} | uploaded: {human_readable_size(self.announce_history_deq[-1]["uploaded"])} | next announce in :{str(datetime.timedelta(seconds=self.announce_current_timer))}')
+            clear_screen()  
             time.sleep(1)
-
+  
 
 def human_readable_size(size, decimal_places=2):
     for unit in ['B','KiB','MiB','GiB','TiB']:
@@ -179,11 +181,12 @@ def build_announce_info(data):
     if (not announce_info['main'].startswith('udp')):
         announce_info['list_of_lists'].insert(-1,[announce_info['main']])
 
-    if(len(announce_info['list_of_lists']) == 0): raise Exception('NO tcp/http tracker url announce found')
+    if(len(announce_info['list_of_lists']) == 0): raise Exception('No tcp/http tracker url announce found')
 
     return announce_info
 
 def tracker_announce_request(url, query_string):
+    return 30
     request = urllib.request.Request(url = f'{url}?{query_string}', headers= {'User-Agent' :'qBittorrent/4.0.3', 'Accept-Encoding':'gzip'})	
     response = urllib.request.urlopen(request).read()
     try:
@@ -239,18 +242,20 @@ def percent_validation(n):
 
 def input_size_2_byte_size(input, total_size ):        
     if input.lower().endswith('kb'):
-        return (int(input[:-2])) * 1024
+        return int((float(input[:-2])) * 1024)
     elif input.lower().endswith('mb'):
-        return (int(input[:-2])) * (1024 **2)
+        return int((float(input[:-2])) * (1024 **2))
     elif input.lower().endswith('gb'):
-        return (int(input[:-2])) * (1024 **3)
+        return int((float(input[:-2])) * (1024 **3))
     elif input.lower().endswith('tb'):
-        return (int(input[:-2])) * (1024 **4)
+        return int((float(input[:-2])) * (1024 **4))
     elif input.lower().endswith('b'):
-        return int(input[:-1])
+        return int(float(input[:-1]))
     elif input.endswith('%'):
-        percent_validation(int(input[:-1]))
-        return int((int(input[:-1])/100 ) * total_size)
+        percent_validation(int(float(input[:-1])))
+        return int((float(input[:-1])/100 ) * total_size)
+    else:
+        raise Exception('Size not found')
 
 def check_downloaded_initial_value(input, total_size_b):
     size_b  =input_size_2_byte_size(input,total_size_b)
@@ -263,7 +268,7 @@ def check_uploaded_initial_value(input, total_size_b):
     return size_b
 
 def check_speed(input):
-    return int(input[:-4])
+    return int(float(input[:-4]))
 
 
 def validate_download_args(downloaded_arg, download_speed_arg,total_size_b):
@@ -302,8 +307,8 @@ def read_file(f, args_download, args_upload):
         
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', required=True, metavar=('(TORRENT_PATH)'), help='path .torrent file' , type=argparse.FileType('rb'))
-parser.add_argument('-d', required=True,help='parms for download', nargs=2 ,metavar=('(%_COMPLETE)', '(KBS_SPEED)'))
-parser.add_argument('-u',required=True,help='parms for upload', nargs=2 ,metavar=('(%_COMPLETE)', '(KBS_SPEED)'))
+parser.add_argument('-d', required=True,help='parms for download', nargs=2 ,metavar=('(%_B_KB_MB_GB_TB_COMPLETE)', '(KBPS_SPEED)'))
+parser.add_argument('-u',required=True,help='parms for upload', nargs=2 ,metavar=('(%_B_KB_MB_GB_TB_COMPLETE)', '(KBPS_SPEED)'))
 args = parser.parse_args()
 
 read_file(args.t, args.d, args.u)
