@@ -186,7 +186,6 @@ def build_announce_info(data):
     return announce_info
 
 def tracker_announce_request(url, query_string):
-    return 30
     request = urllib.request.Request(url = f'{url}?{query_string}', headers= {'User-Agent' :'qBittorrent/4.0.3', 'Accept-Encoding':'gzip'})	
     response = urllib.request.urlopen(request).read()
     try:
