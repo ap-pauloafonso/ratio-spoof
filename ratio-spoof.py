@@ -304,10 +304,15 @@ def read_file(f, args_download, args_upload):
     state.start_announcing()
 
         
-parser = argparse.ArgumentParser()
-parser.add_argument('-t', required=True, metavar=('(TORRENT_PATH)'), help='path .torrent file' , type=argparse.FileType('rb'))
-parser.add_argument('-d', required=True,help='parms for download', nargs=2 ,metavar=('(%_B_KB_MB_GB_TB_COMPLETE)', '(KBPS_SPEED)'))
-parser.add_argument('-u',required=True,help='parms for upload', nargs=2 ,metavar=('(%_B_KB_MB_GB_TB_COMPLETE)', '(KBPS_SPEED)'))
+tip  =  """
+<INITIAL_DOWNLOADED> and <INITIAL_UPLOADED> must be in %, b, kb, mb, gb, tb
+<DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps
+"""
+parser = argparse.ArgumentParser(epilog=tip, description='ratio-spoof is a open source tool to trick private trackers',formatter_class=argparse.RawDescriptionHelpFormatter)
+group = parser.add_argument_group('required arguments')
+group.add_argument('-t', required=True, metavar=('<TORRENT_PATH>'), help='path .torrent file' , type=argparse.FileType('rb'))
+group.add_argument('-d', required=True,help='required download arg values', nargs=2 ,metavar=('<INITIAL_DOWNLOADED>', '<DOWNLOAD_SPEED>'))
+group.add_argument('-u',required=True,help='required upload arg values ', nargs=2 ,metavar=('<INITIAL_UPLOADED>', '<UPLOAD_SPEED>'))
 args = parser.parse_args()
 
 read_file(args.t, args.d, args.u)
