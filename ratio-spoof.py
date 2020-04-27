@@ -41,15 +41,17 @@ class RatioSpoofState():
         self.announce_history_deq = deque(maxlen=10)
         self.deq_count = 0
         self.numwant = 200
+        self.seeders = None
+        self.leechers = None
         self.__add_announce(current_downloaded, current_uploaded ,next_announce_left_b(current_downloaded, total_size))
-        threading.Thread(daemon = True, target = (lambda: self.__print_state())).start()
-        threading.Thread(daemon = True, target = (lambda: self.__decrease_timer())).start()
 
     def start_announcing(self):
-        announce_rate = self.__announce('started')
+        announce_interval = self.__announce('started')
+        threading.Thread(daemon = True, target = (lambda: self.__decrease_timer())).start()
+        threading.Thread(daemon = True, target = (lambda: self.__print_state())).start()
         while True:
-            self.__generate_next_announce(announce_rate)
-            time.sleep(announce_rate)
+            self.__generate_next_announce(announce_interval)
+            time.sleep(announce_interval)
             self.__announce()
 
     def __add_announce(self, current_downloaded, current_uploaded, left):
@@ -66,7 +68,7 @@ class RatioSpoofState():
         current_uploaded = next_announce_total_b(self.upload_speed,self.announce_history_deq[-1]['uploaded'], self.piece_size, self.announce_rate)
         current_left  = next_announce_left_b(current_downloaded, self.total_size)
         self.__add_announce(current_downloaded,current_uploaded,current_left)
-    
+
     def __announce(self, event = None):
         last_announce_data = self.announce_history_deq[-1]
         query_dict  = build_query_string(self, last_announce_data, event)
@@ -77,16 +79,24 @@ class RatioSpoofState():
             for tier_list in self.announce_info['list_of_lists']:
                 for item in tier_list:
                     try:
-                        return tracker_announce_request(item, query_dict)
+                        announce_response  = tracker_announce_request(item, query_dict)
+                        self.__update_seeders_and_leechers(announce_response)
+                        return announce_response['interval']
                     except Exception as e : error = str(e)
                 
         else:
             url = self.announce_info['main']
             try:
-                return tracker_announce_request(url, query_dict)
+                announce_response  = tracker_announce_request(url, query_dict)
+                self.__update_seeders_and_leechers(announce_response)
+                return announce_response['interval']
             except Exception as e : error = str(e)
             
         raise Exception(f'Connection error with the tracker: {error}')
+
+    def __update_seeders_and_leechers(self, dict):
+        self.seeders = dict['seeders']
+        self.leechers = dict['leechers']
 
     def __decrease_timer(self):
         while True:
@@ -102,10 +112,13 @@ class RatioSpoofState():
     
     def __print_state(self):
         while True:
+            clear_screen()  
             print('  RATIO-SPOOF  '.center(shutil.get_terminal_size().columns,'#'))
             print(f"""
             Torrent: {self.torrent_name}
-            Tracker:{self.announce_info['main']}
+            Tracker: {self.announce_info['main']}
+            Seeders: {self.seeders if self.seeders !=None else 'not informed'}
+            Leechers: {self.leechers if self.leechers !=None else 'not informed'}
             Download Speed: {self.download_speed}KB/s 
             Upload Speed: {self.upload_speed}KB/s
             Size: {human_readable_size(self.total_size)}
@@ -115,7 +128,6 @@ class RatioSpoofState():
             for item in list(self.announce_history_deq)[:len(self.announce_history_deq)-1]:
                 print(f'#{item["count"]} downloaded: {human_readable_size(item["downloaded"])}({item["percent"]}%) | left: {human_readable_size(item["left"])} | uploaded: {human_readable_size(item["uploaded"])} | announced')
             print(f'#{self.announce_history_deq[-1]["count"]} downloaded: {human_readable_size(self.announce_history_deq[-1]["downloaded"])}({self.announce_history_deq[-1]["percent"]}%) | left: {human_readable_size(self.announce_history_deq[-1]["left"])} | uploaded: {human_readable_size(self.announce_history_deq[-1]["uploaded"])} | next announce in :{str(datetime.timedelta(seconds=self.announce_current_timer))}')
-            clear_screen()  
             time.sleep(1)
   
 
@@ -199,7 +211,7 @@ def tracker_announce_request(url, query_string):
         interval = decoded_response.get('interval',None)
 
     if 'interval' is not None:
-        return int(decoded_response['interval'])
+        return  { 'interval': int(decoded_response['interval']), 'seeders': decoded_response.get('complete'), 'leechers': decoded_response.get('incomplete') }
     else: raise Exception(json.dumps(decoded_response))
 
 def build_query_string(state:RatioSpoofState, curent_info, event):    
