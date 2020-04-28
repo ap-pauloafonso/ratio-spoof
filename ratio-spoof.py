@@ -213,7 +213,7 @@ def tracker_announce_request(url, query_string):
     if(interval is None):
         interval = decoded_response.get('interval',None)
 
-    if 'interval' is not None:
+    if interval is not None:
         return  { 'interval': int(decoded_response['interval']), 'seeders': decoded_response.get('complete'), 'leechers': decoded_response.get('incomplete') }
     else: raise Exception(json.dumps(decoded_response))
 
