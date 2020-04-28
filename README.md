@@ -12,9 +12,8 @@ Ratio-spoof acts like a normal bittorrent client but without downloading or uplo
 ## Usage
 With a recent python3 version installed, you will be able to run it on linux/macos/windows.
 ```
-usage: ratio-spoof.py [-h] -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> <UPLOAD_SPEED>
+usage: ratio-spoof.py -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> <UPLOAD_SPEED>
 
-ratio-spoof is a open source tool to trick private trackers
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -50,5 +49,6 @@ The currently emulation is hard coded to be a popular and accepted client qbitto
 
 ## Resources
 http://www.bittorrent.org/beps/bep_0003.html
+
 https://wiki.theory.org/index.php/BitTorrentSpecification
 

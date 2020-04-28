@@ -145,6 +145,9 @@ def clear_screen():
         print("\033c", end="")
 
 def t_total_size(data):
+    if ('length' in data['info']):
+        return data['info']['length']
+        
     return sum(map(lambda x : x['length'] , data['info']['files']))
 
 def t_infohash_urlencoded(data, raw_data):
