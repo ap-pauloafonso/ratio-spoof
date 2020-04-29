@@ -1,5 +1,5 @@
 # ratio-spoof
-Ratio-spoof is a cross-platform, free and open source tool to spoof donwload/upload amount on private bittorrent trackers.
+Ratio-spoof is a cross-platform, free and open source tool to spoof the download/upload amount on private bittorrent trackers.
 
 ![](./media/demo.gif)
 
