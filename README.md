@@ -1,5 +1,5 @@
 # ratio-spoof
-ratio-spof is  a cross-platform, free and open source tool to spoof private bittorrent trackers the amount downloaded or uploaded by the peer.
+Ratio-spoof is a cross-platform, free and open source tool to spoof donwload/upload amount on private bittorrent trackers.
 
 ![](./media/demo.gif)
 
@@ -7,7 +7,7 @@ ratio-spof is  a cross-platform, free and open source tool to spoof private bitt
 Here in brazil, not everybody has a great upload speed, and most of the private trackers requires a ratio to be greater than or equal to 1 (e.g. if you downloaded 1gb you must upload 1gb as well) in order to survive. Plus, i have always been fascinated by the bittorrent protocol, [i even made a bittorrent webclient to learn a bit about it ](https://github.com/ap-pauloafonso/rwTorrent) so with the current global covid-19 lockdown i got some free time and decided to code my own simple cli tool to spoof bittorrent trackers.
 
 ## How does it works?
-The way that a bittorrent protocol works is that there is no way that a tracker knows how much certain peer downloaded or uploaded, so it depends on the peer itself telling them how much they downloaded or uploaded. 
+Bittorrent protocol works in such a way that there is no way that a tracker knows how much certain peer have downloaded or uploaded, so the tracker depends on the peer itself telling the amounts.
 
 Ratio-spoof acts like a normal bittorrent client but without downloading or uploading anything, in fact it just tricks the tracker pretending that.
 
