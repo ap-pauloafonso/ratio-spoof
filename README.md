@@ -43,7 +43,7 @@ required arguments:
 * Will start "downloading" with the initial value of 2gb downloaded  if possible at 500kbps speed until it reaches 100% mark.
 * Will start "uploading" with the initial value of 1gb uplodead at 1024kbps (aka 1mb/s) indefinitely.
 
-## Will i get cought using it ?
+## Will i get caught using it ?
 Depends wether you use it carefuly, Its a hard task to catch cheaters, but if you start uploading crazy amounts out of nowhere or seeding something with no active leecher on the swarm you may be in risk.
 
 ## Bittorrent client supported 
