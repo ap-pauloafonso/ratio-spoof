@@ -25,7 +25,7 @@ import shutil
 class RatioSpoofState():
     def __init__(self, torrent_name,download_speed, upload_speed, \
                     announce_rate, current_downloaded, current_uploaded,\
-                    piece_size, total_size, announce_info, info_hash_urlencoded):
+                    piece_size, total_size, announce_info, info_hash_urlencoded, port):
         self.__lock =  threading.Lock()
         self.torrent_name = torrent_name
         self.download_speed = download_speed
@@ -43,6 +43,7 @@ class RatioSpoofState():
         self.numwant = 200
         self.seeders = None
         self.leechers = None
+        self.port = port
         self.__add_announce(current_downloaded, current_uploaded ,next_announce_left_b(current_downloaded, total_size))
 
     def start_announcing(self):
@@ -71,7 +72,7 @@ class RatioSpoofState():
 
     def __announce(self, event = None):
         last_announce_data = self.announce_history_deq[-1]
-        query_dict  = build_query_string(self, last_announce_data, event)
+        query_dict  = build_query_string(self, last_announce_data, event, self.port)
 
         error =''
 
@@ -122,6 +123,7 @@ class RatioSpoofState():
             Download Speed: {self.download_speed}KB/s 
             Upload Speed: {self.upload_speed}KB/s
             Size: {human_readable_size(self.total_size)}
+            Emulation: qBittorrent v4.03 | Port: {self.port}
             """)
             print('  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  '.center(shutil.get_terminal_size().columns, '#'))
             print()
@@ -217,10 +219,10 @@ def tracker_announce_request(url, query_string):
         return  { 'interval': int(decoded_response['interval']), 'seeders': decoded_response.get('complete'), 'leechers': decoded_response.get('incomplete') }
     else: raise Exception(json.dumps(decoded_response))
 
-def build_query_string(state:RatioSpoofState, curent_info, event):    
+def build_query_string(state:RatioSpoofState, curent_info,event, port):    
     query = {
     'peer_id':state.peer_id,
-    'port':8999,
+    'port':port,
     'uploaded':curent_info['uploaded'],
     'downloaded':curent_info['downloaded'],
     'left':curent_info['left'],
@@ -303,7 +305,7 @@ def validate_upload_args(uploaded_arg, upload_speed_arg, total_size_b):
     return (uploaded_b, speed_kbps)
 
 
-def read_file(f, args_download, args_upload):
+def read_file(f, args_download, args_upload, port):
     raw_data = f.read()
     result = bencode_parser.decode(raw_data)
     total_size = t_total_size(result)
@@ -314,7 +316,7 @@ def read_file(f, args_download, args_upload):
 
     state  = RatioSpoofState(result['info']['name'],download_speed_kbps,upload_speed_kbps,0,\
                              downloaded, uploaded_b, piece_size,total_size,
-                             build_announce_info(result),t_infohash_urlencoded(result, raw_data))
+                             build_announce_info(result),t_infohash_urlencoded(result, raw_data), port)
 
     state.start_announcing()
 
@@ -324,10 +326,11 @@ tip  =  """
 <DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps
 """
 parser = argparse.ArgumentParser(epilog=tip, description='ratio-spoof is a open source tool to trick private trackers',formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('-p' ,required=False ,type=int, default=8999, choices=range(1, 65535) ,help='change the port number, the default is 8999' , metavar='[PORT]')
 group = parser.add_argument_group('required arguments')
 group.add_argument('-t', required=True, metavar=('<TORRENT_PATH>'), help='path .torrent file' , type=argparse.FileType('rb'))
 group.add_argument('-d', required=True,help='required download arg values', nargs=2 ,metavar=('<INITIAL_DOWNLOADED>', '<DOWNLOAD_SPEED>'))
 group.add_argument('-u',required=True,help='required upload arg values ', nargs=2 ,metavar=('<INITIAL_UPLOADED>', '<UPLOAD_SPEED>'))
 args = parser.parse_args()
 
-read_file(args.t, args.d, args.u)
+read_file(args.t, args.d, args.u,args.p)

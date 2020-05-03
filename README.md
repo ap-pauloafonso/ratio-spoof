@@ -19,6 +19,8 @@ usage: ratio-spoof.py -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> <DOWNLOAD_SPEED>
 
 optional arguments:
   -h, --help            show this help message and exit
+  -p [PORT]             change the port number, the default is 8999
+
 
 required arguments:
   -t <TORRENT_PATH>     path .torrent file
