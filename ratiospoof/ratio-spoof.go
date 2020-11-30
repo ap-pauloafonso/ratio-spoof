@@ -1,6 +1,7 @@
 package ratiospoof
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"errors"
@@ -413,23 +414,23 @@ func (R *ratioSPoofState) tryMakeRequest(query string) trackerResponse {
 		}
 		resp, err := R.httpClient.Do(req)
 		if err == nil {
-			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				bytes, _ := ioutil.ReadAll(resp.Body)
-				mimeType := http.DetectContentType(bytes)
+				bytesR, _ := ioutil.ReadAll(resp.Body)
+				mimeType := http.DetectContentType(bytesR)
 				if mimeType == "application/x-gzip" {
-					gzipReader, _ := gzip.NewReader(resp.Body)
-					defer gzipReader.Close()
-					bytes, _ = ioutil.ReadAll(gzipReader)
+					gzipReader, _ := gzip.NewReader(bytes.NewReader(bytesR))
+					bytesR, _ = ioutil.ReadAll(gzipReader)
+					gzipReader.Close()
 				}
-				R.lastTackerResponse = string(bytes)
-				decodedResp := beencode.Decode(bytes)
+				R.lastTackerResponse = string(bytesR)
+				decodedResp := beencode.Decode(bytesR)
 				if idx != 0 {
 					R.torrentInfo.trackerInfo.SwapFirst(idx)
 				}
 				ret := extractTrackerResponse(decodedResp)
 				return ret
 			}
+			resp.Body.Close()
 		}
 	}
 	panic("Connection error with the tracker")
