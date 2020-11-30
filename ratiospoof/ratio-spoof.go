@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/ap-pauloafonso/ratio-spoof/beencode"
@@ -226,22 +228,32 @@ func (A *announceHistory) pushValueHistory(value announceEntry) {
 	A.PushBack(value)
 }
 
+func (R *ratioSPoofState) gracefullyExit() {
+	R.status = "stopped"
+	R.numWant = 0
+	R.fireAnnounce()
+}
+
 func (R *ratioSPoofState) Run() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
 	go R.decreaseTimer()
 	go R.printState()
-	for {
-		R.generateNextAnnounce()
-		time.Sleep(time.Duration(R.announceInterval) * time.Second)
-		R.fireAnnounce()
-	}
-
+	go func() {
+		for {
+			R.generateNextAnnounce()
+			time.Sleep(time.Duration(R.announceInterval) * time.Second)
+			R.fireAnnounce()
+		}
+	}()
+	<-sigCh
+	R.gracefullyExit()
 }
 func (R *ratioSPoofState) firstAnnounce() {
 	println("Trying to connect to the tracker...")
 	R.addAnnounce(R.input.initialDownloaded, R.input.initialUploaded, calculateBytesLeft(R.input.initialDownloaded, R.torrentInfo.totalSize), (float32(R.input.initialDownloaded)/float32(R.torrentInfo.totalSize))*100)
 	R.fireAnnounce()
-	R.AfterFirstRequestState()
 }
 
 func (R *ratioSPoofState) updateInterval(resp trackerResponse) {
@@ -435,9 +447,6 @@ func (R *ratioSPoofState) tryMakeRequest(query string) trackerResponse {
 	}
 	panic("Connection error with the tracker")
 
-}
-func (R *ratioSPoofState) AfterFirstRequestState() {
-	R.status = ""
 }
 
 func calculateNextTotalSizeByte(speedKbps, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
