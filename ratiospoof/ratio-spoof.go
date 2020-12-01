@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -235,6 +236,7 @@ func (R *ratioSPoofState) gracefullyExit() {
 }
 
 func (R *ratioSPoofState) Run() {
+	rand.Seed(time.Now().UnixNano())
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
@@ -286,8 +288,10 @@ func (R *ratioSPoofState) fireAnnounce() {
 	query := replacer.Replace(R.bitTorrentClient.Query())
 
 	trackerResp := R.tryMakeRequest(query)
-	R.updateSeedersAndLeechers(trackerResp)
-	R.updateInterval(trackerResp)
+	if trackerResp != nil {
+		R.updateSeedersAndLeechers(*trackerResp)
+		R.updateInterval(*trackerResp)
+	}
 }
 func (R *ratioSPoofState) generateNextAnnounce() {
 	R.resetTimer(R.announceInterval)
@@ -416,7 +420,7 @@ func (R *ratioSPoofState) resetTimer(newAnnounceRate int) {
 	R.currentAnnounceTimer = R.announceRate
 }
 
-func (R *ratioSPoofState) tryMakeRequest(query string) trackerResponse {
+func (R *ratioSPoofState) tryMakeRequest(query string) *trackerResponse {
 	for idx, url := range R.torrentInfo.trackerInfo.urls {
 		completeURL := url + "?" + strings.TrimLeft(query, "?")
 		R.lastAnounceRequest = completeURL
@@ -428,6 +432,9 @@ func (R *ratioSPoofState) tryMakeRequest(query string) trackerResponse {
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
 				bytesR, _ := ioutil.ReadAll(resp.Body)
+				if len(bytesR) == 0 {
+					return nil
+				}
 				mimeType := http.DetectContentType(bytesR)
 				if mimeType == "application/x-gzip" {
 					gzipReader, _ := gzip.NewReader(bytes.NewReader(bytesR))
@@ -440,7 +447,7 @@ func (R *ratioSPoofState) tryMakeRequest(query string) trackerResponse {
 					R.torrentInfo.trackerInfo.SwapFirst(idx)
 				}
 				ret := extractTrackerResponse(decodedResp)
-				return ret
+				return &ret
 			}
 			resp.Body.Close()
 		}
@@ -455,7 +462,7 @@ func calculateNextTotalSizeByte(speedKbps, currentByte, pieceSizeByte, seconds, 
 	}
 	total := currentByte + (speedKbps * 1024 * seconds)
 	closestPieceNumber := int(total / pieceSizeByte)
-	closestPieceNumber += 5
+	closestPieceNumber += rand.Intn(10-1) + 1
 	nextTotal := closestPieceNumber * pieceSizeByte
 
 	if limitTotalBytes != 0 && nextTotal > limitTotalBytes {
