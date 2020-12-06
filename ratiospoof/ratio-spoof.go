@@ -39,7 +39,6 @@ type ratioSPoofState struct {
 	torrentInfo          *torrentInfo
 	input                *inputParsed
 	bitTorrentClient     TorrentClient
-	announceRate         int
 	currentAnnounceTimer int
 	announceInterval     int
 	numWant              int
@@ -50,6 +49,7 @@ type ratioSPoofState struct {
 	announceHistory      announceHistory
 	lastAnounceRequest   string
 	lastTackerResponse   string
+	retryAttempt         int
 }
 type InputArgs struct {
 	TorrentPath       string
@@ -239,7 +239,7 @@ func (R *ratioSPoofState) gracefullyExit() {
 	fmt.Printf("\nGracefully exiting...\n")
 	R.status = "stopped"
 	R.numWant = 0
-	R.fireAnnounce()
+	R.fireAnnounce(false)
 }
 
 func (R *ratioSPoofState) Run() {
@@ -255,7 +255,7 @@ func (R *ratioSPoofState) Run() {
 		for {
 			R.generateNextAnnounce()
 			time.Sleep(time.Duration(R.announceInterval) * time.Second)
-			R.fireAnnounce()
+			R.fireAnnounce(true)
 		}
 	}()
 	<-sigCh
@@ -265,7 +265,7 @@ func (R *ratioSPoofState) Run() {
 func (R *ratioSPoofState) firstAnnounce() {
 	println("Trying to connect to the tracker...")
 	R.addAnnounce(R.input.initialDownloaded, R.input.initialUploaded, calculateBytesLeft(R.input.initialDownloaded, R.torrentInfo.totalSize), (float32(R.input.initialDownloaded)/float32(R.torrentInfo.totalSize))*100)
-	R.fireAnnounce()
+	R.fireAnnounce(false)
 }
 
 func (R *ratioSPoofState) updateInterval(resp trackerResponse) {
@@ -284,7 +284,7 @@ func (R *ratioSPoofState) addAnnounce(currentDownloaded, currentUploaded, curren
 	R.announceCount++
 	R.announceHistory.pushValueHistory(announceEntry{count: R.announceCount, downloaded: currentDownloaded, uploaded: currentUploaded, left: currentLeft, percentDownloaded: percentDownloaded})
 }
-func (R *ratioSPoofState) fireAnnounce() {
+func (R *ratioSPoofState) fireAnnounce(retry bool) {
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.torrentInfo.infoHashURLEncoded,
 		"{port}", fmt.Sprint(R.input.port),
@@ -297,14 +297,42 @@ func (R *ratioSPoofState) fireAnnounce() {
 		"{numwant}", fmt.Sprint(R.numWant))
 	query := replacer.Replace(R.bitTorrentClient.Query())
 
-	trackerResp := R.tryMakeRequest(query)
+	var trackerResp *trackerResponse
+	if retry {
+		retryDelay := 30 * time.Second
+		for {
+			exit := false
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						R.changeCurrentTimer(int(retryDelay.Seconds()))
+						R.retryAttempt++
+						time.Sleep(retryDelay)
+						retryDelay *= 2
+						if retryDelay.Seconds() > 900 {
+							retryDelay = 900
+						}
+					}
+				}()
+				trackerResp = R.tryMakeRequest(query)
+				exit = true
+			}()
+			if exit {
+				break
+			}
+		}
+
+	} else {
+		trackerResp = R.tryMakeRequest(query)
+	}
+	R.retryAttempt = 0
 	if trackerResp != nil {
 		R.updateSeedersAndLeechers(*trackerResp)
 		R.updateInterval(*trackerResp)
 	}
 }
 func (R *ratioSPoofState) generateNextAnnounce() {
-	R.resetTimer(R.announceInterval)
+	R.changeCurrentTimer(R.announceInterval)
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
 	currentDownloaded := lastAnnounce.downloaded
 	var downloadCandidate int
@@ -398,6 +426,10 @@ func (R *ratioSPoofState) printState(exitedCH <-chan string) {
 			if R.leechers == 0 {
 				leechersStr = "not informed"
 			}
+			var retryStr string
+			if R.retryAttempt > 0 {
+				retryStr = fmt.Sprintf("(*Retry %v - check your connection)", R.retryAttempt)
+			}
 			fmt.Println(center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
 			fmt.Printf(`
 	Torrent: %v
@@ -420,7 +452,13 @@ func (R *ratioSPoofState) printState(exitedCH <-chan string) {
 
 			}
 			lastDequeItem := R.announceHistory.At(R.announceHistory.Len() - 1).(announceEntry)
-			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v", lastDequeItem.count, humanReadableSize(float64(lastDequeItem.downloaded)), lastDequeItem.percentDownloaded, humanReadableSize(float64(lastDequeItem.left)), humanReadableSize(float64(lastDequeItem.uploaded)), fmtDuration(R.currentAnnounceTimer))
+			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v", lastDequeItem.count,
+				humanReadableSize(float64(lastDequeItem.downloaded)),
+				lastDequeItem.percentDownloaded,
+				humanReadableSize(float64(lastDequeItem.left)),
+				humanReadableSize(float64(lastDequeItem.uploaded)),
+				fmtDuration(R.currentAnnounceTimer),
+				retryStr)
 
 			if R.input.debug {
 				fmt.Println()
@@ -437,11 +475,10 @@ func (R *ratioSPoofState) printState(exitedCH <-chan string) {
 	}
 }
 
-func (R *ratioSPoofState) resetTimer(newAnnounceRate int) {
-	R.announceRate = newAnnounceRate
+func (R *ratioSPoofState) changeCurrentTimer(newAnnounceRate int) {
 	R.mutex.Lock()
-	defer R.mutex.Unlock()
-	R.currentAnnounceTimer = R.announceRate
+	R.currentAnnounceTimer = newAnnounceRate
+	R.mutex.Unlock()
 }
 
 func (R *ratioSPoofState) tryMakeRequest(query string) *trackerResponse {
