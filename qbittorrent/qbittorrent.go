@@ -51,6 +51,13 @@ func (qb *qbitTorrent) Query() string {
 func (qb *qbitTorrent) Headers() map[string]string {
 	return qb.dictHeaders
 }
+func (qb *qbitTorrent) NextAmountReport(downloadCandidateNextAmount, uploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int) {
+
+	d := downloadCandidateNextAmount
+	u := uploadCandidateNextAmount - (uploadCandidateNextAmount % (16 * 1024))
+	l := leftCandidateNextAmount - (leftCandidateNextAmount % pieceSize)
+	return d, u, l
+}
 
 func generateHeaders() map[string]string {
 	return map[string]string{"User-Agent": "qBittorrent/4.0.3", "Accept-Encoding": "gzip"}

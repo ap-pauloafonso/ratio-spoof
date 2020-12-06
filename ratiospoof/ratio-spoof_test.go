@@ -1,11 +1,16 @@
 package ratiospoof
 
-import "testing"
+import (
+	"io/ioutil"
+	"testing"
+
+	"github.com/ap-pauloafonso/ratio-spoof/beencode"
+)
 
 func assertAreEqual(t *testing.T, got, want interface{}) {
 	t.Helper()
 	if got != want {
-		t.Errorf("got: %v  want: %v", got, want)
+		t.Errorf("\ngot: %v\n want: %v", got, want)
 	}
 }
 
@@ -125,5 +130,12 @@ func TestClculateNextTotalSizeByte(T *testing.T) {
 	want := 3074560
 
 	assertAreEqual(T, got, want)
+}
 
+func TestUrlEncodeInfoHash(T *testing.T) {
+
+	b, _ := ioutil.ReadFile("")
+	got := extractInfoHashURLEncoded(b, beencode.Decode(b))
+	want := "%60N%7d%1f%8b%3a%9bT%d5%fc%ad%d1%27%ab5%02%1c%fb%03%b0"
+	assertAreEqual(T, got, want)
 }

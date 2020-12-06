@@ -31,7 +31,7 @@ const (
 )
 
 var validInitialSufixes = [...]string{"%", "b", "kb", "mb", "gb", "tb"}
-var validSpeedSufixes = [...]string{"kbps"}
+var validSpeedSufixes = [...]string{"kbps", "mbps"}
 
 type ratioSPoofState struct {
 	mutex                *sync.Mutex
@@ -102,11 +102,11 @@ func (I *InputArgs) parseInput(torrentInfo *torrentInfo) (*inputParsed, error) {
 	if err != nil {
 		return nil, err
 	}
-	downloadSpeed, err := extractInputKbpsSpeed(I.DownloadSpeed)
+	downloadSpeed, err := extractInputByteSpeed(I.DownloadSpeed)
 	if err != nil {
 		return nil, err
 	}
-	uploadSpeed, err := extractInputKbpsSpeed(I.UploadSpeed)
+	uploadSpeed, err := extractInputByteSpeed(I.UploadSpeed)
 	if err != nil {
 		return nil, err
 	}
@@ -147,14 +147,14 @@ func NewRatioSPoofState(input InputArgs, torrentClient TorrentClient, httpclient
 	}, nil
 }
 
-func checkSpeedSufix(input string) bool {
+func checkSpeedSufix(input string) (valid bool, suffix string) {
 	for _, v := range validSpeedSufixes {
 
 		if strings.HasSuffix(strings.ToLower(input), v) {
-			return true
+			return true, input[len(input)-4:]
 		}
 	}
-	return false
+	return false, ""
 }
 
 func extractInputInitialByteCount(initialSizeInput string, totalBytes int, errorIfHigher bool) (int, error) {
@@ -167,17 +167,22 @@ func extractInputInitialByteCount(initialSizeInput string, totalBytes int, error
 	}
 	return byteCount, nil
 }
-func extractInputKbpsSpeed(initialSpeedInput string) (int, error) {
-	if !checkSpeedSufix(initialSpeedInput) {
-		return 0, errors.New("speed must be in kbps")
+func extractInputByteSpeed(initialSpeedInput string) (int, error) {
+	ok, suffix := checkSpeedSufix(initialSpeedInput)
+	if !ok {
+		return 0, fmt.Errorf("speed must be in %v", validSpeedSufixes)
 	}
 	number, _ := strconv.ParseFloat(initialSpeedInput[:len(initialSpeedInput)-4], 64)
-
-	ret := int(number)
-
-	if ret < 0 {
+	if number < 0 {
 		return 0, errors.New("speed can not be negative")
 	}
+
+	if suffix == "kbps" {
+		number *= 1024
+	} else {
+		number = number * 1024 * 1024
+	}
+	ret := int(number)
 	return ret, nil
 }
 
@@ -205,6 +210,7 @@ type TorrentClient interface {
 	Query() string
 	Name() string
 	Headers() map[string]string
+	NextAmountReport(DownloadCandidateNextAmount, UploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int)
 }
 type HttpClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -230,6 +236,7 @@ func (A *announceHistory) pushValueHistory(value announceEntry) {
 }
 
 func (R *ratioSPoofState) gracefullyExit() {
+	fmt.Printf("\nGracefully exiting...\n")
 	R.status = "stopped"
 	R.numWant = 0
 	R.fireAnnounce()
@@ -237,11 +244,13 @@ func (R *ratioSPoofState) gracefullyExit() {
 
 func (R *ratioSPoofState) Run() {
 	rand.Seed(time.Now().UnixNano())
-	sigCh := make(chan os.Signal, 1)
+	sigCh := make(chan os.Signal)
+	stopPrintCh := make(chan string)
+
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
 	go R.decreaseTimer()
-	go R.printState()
+	go R.printState(stopPrintCh)
 	go func() {
 		for {
 			R.generateNextAnnounce()
@@ -250,6 +259,7 @@ func (R *ratioSPoofState) Run() {
 		}
 	}()
 	<-sigCh
+	stopPrintCh <- "exit print"
 	R.gracefullyExit()
 }
 func (R *ratioSPoofState) firstAnnounce() {
@@ -297,18 +307,22 @@ func (R *ratioSPoofState) generateNextAnnounce() {
 	R.resetTimer(R.announceInterval)
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
 	currentDownloaded := lastAnnounce.downloaded
-	var downloaded int
+	var downloadCandidate int
+
 	if currentDownloaded < R.torrentInfo.totalSize {
-		downloaded = calculateNextTotalSizeByte(R.input.downloadSpeed, currentDownloaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, R.torrentInfo.totalSize)
+		downloadCandidate = calculateNextTotalSizeByte(R.input.downloadSpeed, currentDownloaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, R.torrentInfo.totalSize)
 	} else {
-		downloaded = R.torrentInfo.totalSize
+		downloadCandidate = R.torrentInfo.totalSize
 	}
 
 	currentUploaded := lastAnnounce.uploaded
-	uploaded := calculateNextTotalSizeByte(R.input.uploadSpeed, currentUploaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, 0)
+	uploadCandidate := calculateNextTotalSizeByte(R.input.uploadSpeed, currentUploaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, 0)
 
-	left := calculateBytesLeft(downloaded, R.torrentInfo.totalSize)
-	R.addAnnounce(downloaded, uploaded, left, (float32(downloaded)/float32(R.torrentInfo.totalSize))*100)
+	leftCandidate := calculateBytesLeft(downloadCandidate, R.torrentInfo.totalSize)
+
+	d, u, l := R.bitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.torrentInfo.pieceSize)
+
+	R.addAnnounce(d, u, l, (float32(d)/float32(R.torrentInfo.totalSize))*100)
 }
 func (R *ratioSPoofState) decreaseTimer() {
 	for {
@@ -320,7 +334,7 @@ func (R *ratioSPoofState) decreaseTimer() {
 		R.mutex.Unlock()
 	}
 }
-func (R *ratioSPoofState) printState() {
+func (R *ratioSPoofState) printState(exitedCH <-chan string) {
 	terminalSize := func() int {
 		size, _ := ts.GetSize()
 		width := size.Col()
@@ -361,7 +375,17 @@ func (R *ratioSPoofState) printState() {
 		return fmt.Sprintf("%s", d)
 	}
 
+	exit := false
+
+	go func() {
+		_ = <-exitedCH
+		exit = true
+	}()
+
 	for {
+		if exit {
+			break
+		}
 		width := terminalSize()
 		clear()
 		if R.announceHistory.Len() > 0 {
@@ -380,11 +404,11 @@ func (R *ratioSPoofState) printState() {
 	Tracker: %v
 	Seeders: %v
 	Leechers:%v
-	Download Speed: %vKB/s
-	Upload Speed: %vKB/s
+	Download Speed: %v/s
+	Upload Speed: %v/s
 	Size: %v
-	Emulation: %v | Port: %v`, R.torrentInfo.name, R.torrentInfo.trackerInfo.main, seedersStr, leechersStr, R.input.downloadSpeed,
-				R.input.uploadSpeed, humanReadableSize(float64(R.torrentInfo.totalSize)), R.bitTorrentClient.Name(), R.input.port)
+	Emulation: %v | Port: %v`, R.torrentInfo.name, R.torrentInfo.trackerInfo.main, seedersStr, leechersStr, humanReadableSize(float64(R.input.downloadSpeed)),
+				humanReadableSize(float64(R.input.uploadSpeed)), humanReadableSize(float64(R.torrentInfo.totalSize)), R.bitTorrentClient.Name(), R.input.port)
 			fmt.Println()
 			fmt.Println()
 			fmt.Println(center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
@@ -456,19 +480,18 @@ func (R *ratioSPoofState) tryMakeRequest(query string) *trackerResponse {
 
 }
 
-func calculateNextTotalSizeByte(speedKbps, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
-	if speedKbps == 0 {
+func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
+	if speedBytePerSecond == 0 {
 		return currentByte
 	}
-	total := currentByte + (speedKbps * 1024 * seconds)
-	closestPieceNumber := int(total / pieceSizeByte)
-	closestPieceNumber += rand.Intn(10-1) + 1
-	nextTotal := closestPieceNumber * pieceSizeByte
+	totalCandidate := currentByte + (speedBytePerSecond * seconds)
+	randomPieces := rand.Intn(10-1) + 1
+	totalCandidate = totalCandidate + (pieceSizeByte * randomPieces)
 
-	if limitTotalBytes != 0 && nextTotal > limitTotalBytes {
+	if limitTotalBytes != 0 && totalCandidate > limitTotalBytes {
 		return limitTotalBytes
 	}
-	return nextTotal
+	return totalCandidate
 }
 
 func extractInfoHashURLEncoded(rawData []byte, torrentData map[string]interface{}) string {
