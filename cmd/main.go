@@ -46,7 +46,7 @@ required arguments:
 	-us <UPLOAD_SPEED> 						  
 	  
 <INITIAL_DOWNLOADED> and <INITIAL_UPLOADED> must be in %, b, kb, mb, gb, tb
-<DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps
+<DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps, mbps
 `)
 	}
 
