@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"runtime"
 
-	"github.com/ap-pauloafonso/ratio-spoof/qbittorrent"
+	"github.com/ap-pauloafonso/ratio-spoof/emulation"
 	"github.com/ap-pauloafonso/ratio-spoof/ratiospoof"
 )
 
@@ -57,7 +57,7 @@ required arguments:
 		return
 	}
 
-	qbit := qbittorrent.NewQbitTorrent()
+	qbit := emulation.NewQbitTorrent()
 	r, err := ratiospoof.NewRatioSPoofState(
 		ratiospoof.InputArgs{
 			TorrentPath:       *torrentPath,

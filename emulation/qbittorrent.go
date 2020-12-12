@@ -1,4 +1,4 @@
-package qbittorrent
+package emulation
 
 import (
 	"encoding/hex"

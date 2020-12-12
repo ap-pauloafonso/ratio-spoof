@@ -12,9 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,7 +21,6 @@ import (
 
 	"github.com/ap-pauloafonso/ratio-spoof/beencode"
 	"github.com/gammazero/deque"
-	"github.com/olekukonko/ts"
 )
 
 const (
@@ -33,7 +30,7 @@ const (
 var validInitialSufixes = [...]string{"%", "b", "kb", "mb", "gb", "tb"}
 var validSpeedSufixes = [...]string{"kbps", "mbps"}
 
-type ratioSPoofState struct {
+type ratioSpoofState struct {
 	mutex                *sync.Mutex
 	httpClient           HttpClient
 	torrentInfo          *torrentInfo
@@ -124,7 +121,7 @@ func (I *InputArgs) parseInput(torrentInfo *torrentInfo) (*inputParsed, error) {
 	}, nil
 }
 
-func NewRatioSPoofState(input InputArgs, torrentClient TorrentClient, httpclient HttpClient) (*ratioSPoofState, error) {
+func NewRatioSPoofState(input InputArgs, torrentClient TorrentClient, httpclient HttpClient) (*ratioSpoofState, error) {
 
 	torrentInfo, err := extractTorrentInfo(input.TorrentPath)
 	if err != nil {
@@ -136,7 +133,7 @@ func NewRatioSPoofState(input InputArgs, torrentClient TorrentClient, httpclient
 		panic(err)
 	}
 
-	return &ratioSPoofState{
+	return &ratioSpoofState{
 		bitTorrentClient: torrentClient,
 		httpClient:       httpclient,
 		torrentInfo:      torrentInfo,
@@ -235,14 +232,14 @@ func (A *announceHistory) pushValueHistory(value announceEntry) {
 	A.PushBack(value)
 }
 
-func (R *ratioSPoofState) gracefullyExit() {
+func (R *ratioSpoofState) gracefullyExit() {
 	fmt.Printf("\nGracefully exiting...\n")
 	R.status = "stopped"
 	R.numWant = 0
 	R.fireAnnounce(false)
 }
 
-func (R *ratioSPoofState) Run() {
+func (R *ratioSpoofState) Run() {
 	rand.Seed(time.Now().UnixNano())
 	sigCh := make(chan os.Signal)
 	stopPrintCh := make(chan string)
@@ -250,7 +247,7 @@ func (R *ratioSPoofState) Run() {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
 	go R.decreaseTimer()
-	go R.printState(stopPrintCh)
+	go R.PrintState(stopPrintCh)
 	go func() {
 		for {
 			R.generateNextAnnounce()
@@ -262,13 +259,13 @@ func (R *ratioSPoofState) Run() {
 	stopPrintCh <- "exit print"
 	R.gracefullyExit()
 }
-func (R *ratioSPoofState) firstAnnounce() {
+func (R *ratioSpoofState) firstAnnounce() {
 	println("Trying to connect to the tracker...")
 	R.addAnnounce(R.input.initialDownloaded, R.input.initialUploaded, calculateBytesLeft(R.input.initialDownloaded, R.torrentInfo.totalSize), (float32(R.input.initialDownloaded)/float32(R.torrentInfo.totalSize))*100)
 	R.fireAnnounce(false)
 }
 
-func (R *ratioSPoofState) updateInterval(resp trackerResponse) {
+func (R *ratioSpoofState) updateInterval(resp trackerResponse) {
 	if resp.minInterval > 0 {
 		R.announceInterval = resp.minInterval
 	} else {
@@ -276,15 +273,15 @@ func (R *ratioSPoofState) updateInterval(resp trackerResponse) {
 	}
 }
 
-func (R *ratioSPoofState) updateSeedersAndLeechers(resp trackerResponse) {
+func (R *ratioSpoofState) updateSeedersAndLeechers(resp trackerResponse) {
 	R.seeders = resp.seeders
 	R.leechers = resp.leechers
 }
-func (R *ratioSPoofState) addAnnounce(currentDownloaded, currentUploaded, currentLeft int, percentDownloaded float32) {
+func (R *ratioSpoofState) addAnnounce(currentDownloaded, currentUploaded, currentLeft int, percentDownloaded float32) {
 	R.announceCount++
 	R.announceHistory.pushValueHistory(announceEntry{count: R.announceCount, downloaded: currentDownloaded, uploaded: currentUploaded, left: currentLeft, percentDownloaded: percentDownloaded})
 }
-func (R *ratioSPoofState) fireAnnounce(retry bool) {
+func (R *ratioSpoofState) fireAnnounce(retry bool) {
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.torrentInfo.infoHashURLEncoded,
 		"{port}", fmt.Sprint(R.input.port),
@@ -331,7 +328,7 @@ func (R *ratioSPoofState) fireAnnounce(retry bool) {
 		R.updateInterval(*trackerResp)
 	}
 }
-func (R *ratioSPoofState) generateNextAnnounce() {
+func (R *ratioSpoofState) generateNextAnnounce() {
 	R.changeCurrentTimer(R.announceInterval)
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
 	currentDownloaded := lastAnnounce.downloaded
@@ -352,7 +349,7 @@ func (R *ratioSPoofState) generateNextAnnounce() {
 
 	R.addAnnounce(d, u, l, (float32(d)/float32(R.torrentInfo.totalSize))*100)
 }
-func (R *ratioSPoofState) decreaseTimer() {
+func (R *ratioSpoofState) decreaseTimer() {
 	for {
 		time.Sleep(1 * time.Second)
 		R.mutex.Lock()
@@ -362,126 +359,14 @@ func (R *ratioSPoofState) decreaseTimer() {
 		R.mutex.Unlock()
 	}
 }
-func (R *ratioSPoofState) printState(exitedCH <-chan string) {
-	terminalSize := func() int {
-		size, _ := ts.GetSize()
-		width := size.Col()
-		if width < 40 {
-			width = 40
-		}
-		return width
-	}
-	clear := func() {
-		if runtime.GOOS == "windows" {
-			cmd := exec.Command("cmd", "/c", "cls")
-			cmd.Stdout = os.Stdout
-			cmd.Run()
-		} else {
-			fmt.Print("\033c")
-		}
-	}
 
-	center := func(s string, n int, fill string) string {
-		div := n / 2
-		return strings.Repeat(fill, div) + s + strings.Repeat(fill, div)
-	}
-
-	humanReadableSize := func(byteSize float64) string {
-		var unitFound string
-		for _, unit := range []string{"B", "KiB", "MiB", "GiB", "TiB"} {
-			if byteSize < 1024.0 {
-				unitFound = unit
-				break
-			}
-			byteSize /= 1024.0
-		}
-		return fmt.Sprintf("%.2f%v", byteSize, unitFound)
-	}
-
-	fmtDuration := func(seconds int) string {
-		d := time.Duration(seconds) * time.Second
-		return fmt.Sprintf("%s", d)
-	}
-
-	exit := false
-
-	go func() {
-		_ = <-exitedCH
-		exit = true
-	}()
-
-	for {
-		if exit {
-			break
-		}
-		width := terminalSize()
-		clear()
-		if R.announceHistory.Len() > 0 {
-			seedersStr := fmt.Sprint(R.seeders)
-			leechersStr := fmt.Sprint(R.leechers)
-			if R.seeders == 0 {
-				seedersStr = "not informed"
-			}
-
-			if R.leechers == 0 {
-				leechersStr = "not informed"
-			}
-			var retryStr string
-			if R.retryAttempt > 0 {
-				retryStr = fmt.Sprintf("(*Retry %v - check your connection)", R.retryAttempt)
-			}
-			fmt.Println(center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
-			fmt.Printf(`
-	Torrent: %v
-	Tracker: %v
-	Seeders: %v
-	Leechers:%v
-	Download Speed: %v/s
-	Upload Speed: %v/s
-	Size: %v
-	Emulation: %v | Port: %v`, R.torrentInfo.name, R.torrentInfo.trackerInfo.main, seedersStr, leechersStr, humanReadableSize(float64(R.input.downloadSpeed)),
-				humanReadableSize(float64(R.input.uploadSpeed)), humanReadableSize(float64(R.torrentInfo.totalSize)), R.bitTorrentClient.Name(), R.input.port)
-			fmt.Println()
-			fmt.Println()
-			fmt.Println(center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
-			fmt.Println()
-			for i := 0; i <= R.announceHistory.Len()-2; i++ {
-				dequeItem := R.announceHistory.At(i).(announceEntry)
-				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced", dequeItem.count, humanReadableSize(float64(dequeItem.downloaded)), dequeItem.percentDownloaded, humanReadableSize(float64(dequeItem.left)), humanReadableSize(float64(dequeItem.uploaded)))
-				fmt.Println()
-
-			}
-			lastDequeItem := R.announceHistory.At(R.announceHistory.Len() - 1).(announceEntry)
-			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v", lastDequeItem.count,
-				humanReadableSize(float64(lastDequeItem.downloaded)),
-				lastDequeItem.percentDownloaded,
-				humanReadableSize(float64(lastDequeItem.left)),
-				humanReadableSize(float64(lastDequeItem.uploaded)),
-				fmtDuration(R.currentAnnounceTimer),
-				retryStr)
-
-			if R.input.debug {
-				fmt.Println()
-				fmt.Println()
-				fmt.Println(center("  DEBUG  ", width-len("  DEBUG  "), "#"))
-				fmt.Println()
-				fmt.Print(R.lastAnounceRequest)
-				fmt.Println()
-				fmt.Println()
-				fmt.Print(R.lastTackerResponse)
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}
-}
-
-func (R *ratioSPoofState) changeCurrentTimer(newAnnounceRate int) {
+func (R *ratioSpoofState) changeCurrentTimer(newAnnounceRate int) {
 	R.mutex.Lock()
 	R.currentAnnounceTimer = newAnnounceRate
 	R.mutex.Unlock()
 }
 
-func (R *ratioSPoofState) tryMakeRequest(query string) *trackerResponse {
+func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
 	for idx, url := range R.torrentInfo.trackerInfo.urls {
 		completeURL := url + "?" + strings.TrimLeft(query, "?")
 		R.lastAnounceRequest = completeURL
