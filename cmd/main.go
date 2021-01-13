@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"runtime"
+	"os"
 
 	"github.com/ap-pauloafonso/ratio-spoof/emulation"
 	"github.com/ap-pauloafonso/ratio-spoof/ratiospoof"
@@ -24,15 +24,7 @@ func main() {
 	debug := flag.Bool("debug", false, "")
 
 	flag.Usage = func() {
-		var osExecutableSuffix string
-		if runtime.GOOS == "windows" {
-			fmt.Println(`usage: 
-	ratio-spoof.exe -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> -ds <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> -us <UPLOAD_SPEED>`, osExecutableSuffix)
-		} else {
-			fmt.Println(`usage: 
-	./ratio-spoof -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> -ds <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> -us <UPLOAD_SPEED>`, osExecutableSuffix)
-		}
-
+		fmt.Printf("usage: %s -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> -ds <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> -us <UPLOAD_SPEED>\n", os.Args[0])
 		fmt.Print(`
 optional arguments:
 	-h           		show this help message and exit
