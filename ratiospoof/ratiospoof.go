@@ -10,9 +10,9 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -367,8 +367,8 @@ func (R *ratioSpoofState) changeCurrentTimer(newAnnounceRate int) {
 }
 
 func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
-	for idx, url := range R.torrentInfo.trackerInfo.urls {
-		completeURL := url + "?" + strings.TrimLeft(query, "?")
+	for idx, baseUrl := range R.torrentInfo.trackerInfo.urls {
+		completeURL := buildFullUrl(baseUrl, query)
 		R.lastAnounceRequest = completeURL
 		req, _ := http.NewRequest("GET", completeURL, nil)
 		for header, value := range R.bitTorrentClient.Headers() {
@@ -402,6 +402,13 @@ func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
 
 }
 
+func buildFullUrl(baseurl, query string) string {
+	if len(strings.Split(baseurl, "?")) > 1 {
+		return baseurl + "&" + strings.TrimLeft(query, "&")
+	}
+	return baseurl + "?" + strings.TrimLeft(query, "?")
+}
+
 func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
 	if speedBytePerSecond == 0 {
 		return currentByte
@@ -421,7 +428,16 @@ func extractInfoHashURLEncoded(rawData []byte, torrentData map[string]interface{
 	h := sha1.New()
 	h.Write([]byte(rawData[byteOffsets[0]:byteOffsets[1]]))
 	ret := h.Sum(nil)
-	return url.QueryEscape(string(ret))
+	var buf bytes.Buffer
+	re := regexp.MustCompile(`[a-zA-Z0-9\.\-\_\~]`)
+	for _, b := range ret {
+		if re.Match([]byte{b}) {
+			buf.WriteByte(b)
+		} else {
+			buf.WriteString(fmt.Sprintf("%%%02x", b))
+		}
+	}
+	return buf.String()
 
 }
 func extractTotalSize(torrentData map[string]interface{}) int {
