@@ -35,7 +35,7 @@ type ratioSpoofState struct {
 	httpClient           HttpClient
 	torrentInfo          *torrentInfo
 	input                *inputParsed
-	bitTorrentClient     TorrentClient
+	bitTorrentClient     TorrentClientEmulation
 	currentAnnounceTimer int
 	announceInterval     int
 	numWant              int
@@ -121,7 +121,7 @@ func (I *InputArgs) parseInput(torrentInfo *torrentInfo) (*inputParsed, error) {
 	}, nil
 }
 
-func NewRatioSPoofState(input InputArgs, torrentClient TorrentClient, httpclient HttpClient) (*ratioSpoofState, error) {
+func NewRatioSPoofState(input InputArgs, torrentClient TorrentClientEmulation, httpclient HttpClient) (*ratioSpoofState, error) {
 
 	torrentInfo, err := extractTorrentInfo(input.TorrentPath)
 	if err != nil {
@@ -201,7 +201,7 @@ type trackerResponse struct {
 	leechers    int
 }
 
-type TorrentClient interface {
+type TorrentClientEmulation interface {
 	PeerID() string
 	Key() string
 	Query() string

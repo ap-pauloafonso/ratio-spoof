@@ -13,7 +13,8 @@ const (
 	query       = "info_hash={infohash}&peer_id={peerid}&port={port}&uploaded={uploaded}&downloaded={downloaded}&left={left}&corrupt=0&key={key}&event={event}&numwant={numwant}&compact=1&no_peer_id=1&supportcrypto=1&redundant=0"
 )
 
-type TypeTest struct {
+func init() {
+	rand.Seed(time.Now().UnixNano())
 }
 
 type qbitTorrent struct {
@@ -68,7 +69,6 @@ func generatePeerID() string {
 }
 
 func randStringBytes(n int) string {
-	rand.Seed(time.Now().UnixNano())
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = letterBytes[rand.Intn(len(letterBytes))]
