@@ -1,16 +1,109 @@
 package beencode
 
 import (
+	"crypto/sha1"
+	"net/url"
 	"strconv"
 )
 
 const (
-	dictToken                  = byte('d')
-	numberToken                = byte('i')
-	listToken                  = byte('l')
-	endOfCollectionToken       = byte('e')
-	lengthValueStringSeparator = byte(':')
+	dictToken                       = byte('d')
+	numberToken                     = byte('i')
+	listToken                       = byte('l')
+	endOfCollectionToken            = byte('e')
+	lengthValueStringSeparatorToken = byte(':')
+
+	torrentInfoKey        = "info"
+	torrentNameKey        = "name"
+	torrentPieceLengthKey = "piece length"
+	torrentLengthKey      = "length"
+	torrentFilesKey       = "files"
+	mainAnnounceKey       = "announce"
+	announceListKey       = "announce-list"
+	torrentDictOffsetsKey = "byte_offsets"
 )
+
+// TorrentInfo contains all relevant information extracted from a beencode file
+type TorrentInfo struct {
+	Name               string
+	PieceSize          int
+	TotalSize          int
+	TrackerInfo        *TrackerInfo
+	InfoHashURLEncoded string
+}
+
+//TrackerInfo contains http urls from the tracker
+type TrackerInfo struct {
+	Main string
+	Urls []string
+}
+
+type torrentDict struct {
+	resultMap map[string]interface{}
+}
+
+//TorrentDictParse decodes the beencoded bytes and builds the torrentInfo file
+func TorrentDictParse(dat []byte) (*TorrentInfo, error) {
+	dict, _ := mapParse(0, &dat)
+	torrentMap := torrentDict{resultMap: dict}
+	return &TorrentInfo{
+		Name:               torrentMap.resultMap[torrentInfoKey].(map[string]interface{})[torrentNameKey].(string),
+		PieceSize:          torrentMap.resultMap[torrentInfoKey].(map[string]interface{})[torrentPieceLengthKey].(int),
+		TotalSize:          torrentMap.extractTotalSize(),
+		TrackerInfo:        torrentMap.extractTrackerInfo(),
+		InfoHashURLEncoded: torrentMap.extractInfoHashURLEncoded(dat),
+	}, nil
+}
+
+func (T *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
+	byteOffsets := T.resultMap[torrentInfoKey].(map[string]interface{})[torrentDictOffsetsKey].([]int)
+	h := sha1.New()
+	h.Write([]byte(rawData[byteOffsets[0]:byteOffsets[1]]))
+	ret := h.Sum(nil)
+	return url.QueryEscape(string(ret))
+
+}
+
+func (T *torrentDict) extractTotalSize() int {
+	if value, ok := T.resultMap[torrentInfoKey].(map[string]interface{})[torrentLengthKey]; ok {
+		return value.(int)
+	}
+	var total int
+
+	for _, file := range T.resultMap[torrentInfoKey].(map[string]interface{})[torrentFilesKey].([]interface{}) {
+		total += file.(map[string]interface{})[torrentLengthKey].(int)
+	}
+	return total
+}
+
+func (T *torrentDict) extractTrackerInfo() *TrackerInfo {
+	uniqueUrls := make(map[string]int)
+	currentCount := 0
+	if main, ok := T.resultMap[mainAnnounceKey]; ok {
+		if _, found := uniqueUrls[main.(string)]; !found {
+			uniqueUrls[main.(string)] = currentCount
+			currentCount++
+		}
+	}
+	if list, ok := T.resultMap[announceListKey]; ok {
+		for _, innerList := range list.([]interface{}) {
+			for _, item := range innerList.([]interface{}) {
+				if _, found := uniqueUrls[item.(string)]; !found {
+					uniqueUrls[item.(string)] = currentCount
+					currentCount++
+				}
+			}
+		}
+
+	}
+	trackerInfo := TrackerInfo{Urls: make([]string, len(uniqueUrls))}
+	for key, value := range uniqueUrls {
+		trackerInfo.Urls[value] = key
+	}
+
+	trackerInfo.Main = trackerInfo.Urls[0]
+	return &trackerInfo
+}
 
 //Decode accepts a byte slice and returns a map with information parsed.(panic if it fails)
 func Decode(data []byte) map[string]interface{} {
@@ -76,7 +169,7 @@ func numberParse(startIdx int, data *[]byte) (result int, nextIdx int) {
 
 func stringParse(startIdx int, data *[]byte) (result string, nextIdx int) {
 	current := startIdx
-	for (*data)[current : current+1][0] != lengthValueStringSeparator {
+	for (*data)[current : current+1][0] != lengthValueStringSeparatorToken {
 		current++
 	}
 	sizeStr, _ := strconv.Atoi(string(((*data)[startIdx:current])))

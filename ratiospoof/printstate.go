@@ -38,7 +38,7 @@ func (R *ratioSpoofState) PrintState(exitedCH <-chan string) {
 			if R.retryAttempt > 0 {
 				retryStr = fmt.Sprintf("(*Retry %v - check your connection)", R.retryAttempt)
 			}
-			fmt.Println(center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
+			fmt.Printf("%s\n", center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
 			fmt.Printf(`
 	Torrent: %v
 	Tracker: %v
@@ -47,20 +47,15 @@ func (R *ratioSpoofState) PrintState(exitedCH <-chan string) {
 	Download Speed: %v/s
 	Upload Speed: %v/s
 	Size: %v
-	Emulation: %v | Port: %v`, R.torrentInfo.name, R.torrentInfo.trackerInfo.main, seedersStr, leechersStr, humanReadableSize(float64(R.input.downloadSpeed)),
-				humanReadableSize(float64(R.input.uploadSpeed)), humanReadableSize(float64(R.torrentInfo.totalSize)), R.bitTorrentClient.Name(), R.input.port)
-			fmt.Println()
-			fmt.Println()
-			fmt.Println(center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
-			fmt.Println()
+	Emulation: %v | Port: %v`, R.torrentInfo.Name, R.torrentInfo.TrackerInfo.Main, seedersStr, leechersStr, humanReadableSize(float64(R.input.downloadSpeed)),
+				humanReadableSize(float64(R.input.uploadSpeed)), humanReadableSize(float64(R.torrentInfo.TotalSize)), R.bitTorrentClient.Name(), R.input.port)
+			fmt.Printf("\n\n%s\n\n", center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
 			for i := 0; i <= R.announceHistory.Len()-2; i++ {
 				dequeItem := R.announceHistory.At(i).(announceEntry)
-				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced", dequeItem.count, humanReadableSize(float64(dequeItem.downloaded)), dequeItem.percentDownloaded, humanReadableSize(float64(dequeItem.left)), humanReadableSize(float64(dequeItem.uploaded)))
-				fmt.Println()
-
+				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced\n", dequeItem.count, humanReadableSize(float64(dequeItem.downloaded)), dequeItem.percentDownloaded, humanReadableSize(float64(dequeItem.left)), humanReadableSize(float64(dequeItem.uploaded)))
 			}
 			lastDequeItem := R.announceHistory.At(R.announceHistory.Len() - 1).(announceEntry)
-			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v", lastDequeItem.count,
+			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.count,
 				humanReadableSize(float64(lastDequeItem.downloaded)),
 				lastDequeItem.percentDownloaded,
 				humanReadableSize(float64(lastDequeItem.left)),
@@ -69,14 +64,8 @@ func (R *ratioSpoofState) PrintState(exitedCH <-chan string) {
 				retryStr)
 
 			if R.input.debug {
-				fmt.Println()
-				fmt.Println()
-				fmt.Println(center("  DEBUG  ", width-len("  DEBUG  "), "#"))
-				fmt.Println()
-				fmt.Print(R.lastAnounceRequest)
-				fmt.Println()
-				fmt.Println()
-				fmt.Print(R.lastTackerResponse)
+				fmt.Printf("\n%s\n", center("  DEBUG  ", width-len("  DEBUG  "), "#"))
+				fmt.Printf("\n%s\n\n%s", R.lastAnounceRequest, R.lastTackerResponse)
 			}
 			time.Sleep(1 * time.Second)
 		}
