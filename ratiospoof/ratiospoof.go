@@ -266,10 +266,10 @@ func (R *ratioSpoofState) firstAnnounce() {
 }
 
 func (R *ratioSpoofState) updateInterval(resp trackerResponse) {
-	if resp.minInterval > 0 {
-		R.announceInterval = resp.minInterval
-	} else {
+	if resp.interval > 0 {
 		R.announceInterval = resp.interval
+	} else {
+		R.announceInterval = 1800
 	}
 }
 
