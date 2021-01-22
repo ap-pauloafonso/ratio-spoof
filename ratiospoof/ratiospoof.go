@@ -3,7 +3,6 @@ package ratiospoof
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -12,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,8 +31,9 @@ var validSpeedSufixes = [...]string{"kbps", "mbps"}
 type ratioSpoofState struct {
 	mutex                *sync.Mutex
 	httpClient           HttpClient
-	torrentInfo          *torrentInfo
+	torrentInfo          *beencode.TorrentInfo
 	input                *inputParsed
+	trackerState         *httpTracker
 	bitTorrentClient     TorrentClientEmulation
 	currentAnnounceTimer int
 	announceInterval     int
@@ -48,6 +47,30 @@ type ratioSpoofState struct {
 	lastTackerResponse   string
 	retryAttempt         int
 }
+type httpTracker struct {
+	urls []string
+}
+
+func newHttpTracker(torrentInfo *beencode.TorrentInfo) (*httpTracker, error) {
+
+	var result []string
+	for _, url := range torrentInfo.TrackerInfo.Urls {
+		if strings.HasPrefix(url, "http") {
+			result = append(result, url)
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("No tcp/http tracker url announce found")
+	}
+	return &httpTracker{urls: torrentInfo.TrackerInfo.Urls}, nil
+}
+
+func (T *httpTracker) SwapFirst(currentIdx int) {
+	aux := T.urls[0]
+	T.urls[0] = T.urls[currentIdx]
+	T.urls[currentIdx] = aux
+}
+
 type InputArgs struct {
 	TorrentPath       string
 	InitialDownloaded string
@@ -68,34 +91,12 @@ type inputParsed struct {
 	debug             bool
 }
 
-type torrentInfo struct {
-	name               string
-	pieceSize          int
-	totalSize          int
-	trackerInfo        trackerInfo
-	infoHashURLEncoded string
-}
-
-func extractTorrentInfo(torrentPath string) (*torrentInfo, error) {
-	dat, err := ioutil.ReadFile(torrentPath)
+func (I *InputArgs) parseInput(torrentInfo *beencode.TorrentInfo) (*inputParsed, error) {
+	downloaded, err := extractInputInitialByteCount(I.InitialDownloaded, torrentInfo.TotalSize, true)
 	if err != nil {
 		return nil, err
 	}
-	torrentMap := beencode.Decode(dat)
-	return &torrentInfo{
-		name:               torrentMap["info"].(map[string]interface{})["name"].(string),
-		pieceSize:          torrentMap["info"].(map[string]interface{})["piece length"].(int),
-		totalSize:          extractTotalSize(torrentMap),
-		trackerInfo:        extractTrackerInfo(torrentMap),
-		infoHashURLEncoded: extractInfoHashURLEncoded(dat, torrentMap),
-	}, nil
-}
-func (I *InputArgs) parseInput(torrentInfo *torrentInfo) (*inputParsed, error) {
-	downloaded, err := extractInputInitialByteCount(I.InitialDownloaded, torrentInfo.totalSize, true)
-	if err != nil {
-		return nil, err
-	}
-	uploaded, err := extractInputInitialByteCount(I.InitialUploaded, torrentInfo.totalSize, false)
+	uploaded, err := extractInputInitialByteCount(I.InitialUploaded, torrentInfo.TotalSize, false)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,17 @@ func (I *InputArgs) parseInput(torrentInfo *torrentInfo) (*inputParsed, error) {
 
 func NewRatioSPoofState(input InputArgs, torrentClient TorrentClientEmulation, httpclient HttpClient) (*ratioSpoofState, error) {
 
-	torrentInfo, err := extractTorrentInfo(input.TorrentPath)
+	dat, err := ioutil.ReadFile(input.TorrentPath)
+	if err != nil {
+		return nil, err
+	}
+
+	torrentInfo, err := beencode.TorrentDictParse(dat)
+	if err != nil {
+		panic(err)
+	}
+
+	httpTracker, err := newHttpTracker(torrentInfo)
 	if err != nil {
 		panic(err)
 	}
@@ -137,6 +148,7 @@ func NewRatioSPoofState(input InputArgs, torrentClient TorrentClientEmulation, h
 		bitTorrentClient: torrentClient,
 		httpClient:       httpclient,
 		torrentInfo:      torrentInfo,
+		trackerState:     httpTracker,
 		input:            inputParsed,
 		numWant:          200,
 		status:           "started",
@@ -181,17 +193,6 @@ func extractInputByteSpeed(initialSpeedInput string) (int, error) {
 	}
 	ret := int(number)
 	return ret, nil
-}
-
-type trackerInfo struct {
-	main string
-	urls []string
-}
-
-func (T *trackerInfo) SwapFirst(currentIdx int) {
-	aux := T.urls[0]
-	T.urls[0] = T.urls[currentIdx]
-	T.urls[currentIdx] = aux
 }
 
 type trackerResponse struct {
@@ -261,7 +262,7 @@ func (R *ratioSpoofState) Run() {
 }
 func (R *ratioSpoofState) firstAnnounce() {
 	println("Trying to connect to the tracker...")
-	R.addAnnounce(R.input.initialDownloaded, R.input.initialUploaded, calculateBytesLeft(R.input.initialDownloaded, R.torrentInfo.totalSize), (float32(R.input.initialDownloaded)/float32(R.torrentInfo.totalSize))*100)
+	R.addAnnounce(R.input.initialDownloaded, R.input.initialUploaded, calculateBytesLeft(R.input.initialDownloaded, R.torrentInfo.TotalSize), (float32(R.input.initialDownloaded)/float32(R.torrentInfo.TotalSize))*100)
 	R.fireAnnounce(false)
 }
 
@@ -283,7 +284,7 @@ func (R *ratioSpoofState) addAnnounce(currentDownloaded, currentUploaded, curren
 }
 func (R *ratioSpoofState) fireAnnounce(retry bool) {
 	lastAnnounce := R.announceHistory.Back().(announceEntry)
-	replacer := strings.NewReplacer("{infohash}", R.torrentInfo.infoHashURLEncoded,
+	replacer := strings.NewReplacer("{infohash}", R.torrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(R.input.port),
 		"{peerid}", R.bitTorrentClient.PeerID(),
 		"{uploaded}", fmt.Sprint(lastAnnounce.uploaded),
@@ -334,20 +335,20 @@ func (R *ratioSpoofState) generateNextAnnounce() {
 	currentDownloaded := lastAnnounce.downloaded
 	var downloadCandidate int
 
-	if currentDownloaded < R.torrentInfo.totalSize {
-		downloadCandidate = calculateNextTotalSizeByte(R.input.downloadSpeed, currentDownloaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, R.torrentInfo.totalSize)
+	if currentDownloaded < R.torrentInfo.TotalSize {
+		downloadCandidate = calculateNextTotalSizeByte(R.input.downloadSpeed, currentDownloaded, R.torrentInfo.PieceSize, R.currentAnnounceTimer, R.torrentInfo.TotalSize)
 	} else {
-		downloadCandidate = R.torrentInfo.totalSize
+		downloadCandidate = R.torrentInfo.TotalSize
 	}
 
 	currentUploaded := lastAnnounce.uploaded
-	uploadCandidate := calculateNextTotalSizeByte(R.input.uploadSpeed, currentUploaded, R.torrentInfo.pieceSize, R.currentAnnounceTimer, 0)
+	uploadCandidate := calculateNextTotalSizeByte(R.input.uploadSpeed, currentUploaded, R.torrentInfo.PieceSize, R.currentAnnounceTimer, 0)
 
-	leftCandidate := calculateBytesLeft(downloadCandidate, R.torrentInfo.totalSize)
+	leftCandidate := calculateBytesLeft(downloadCandidate, R.torrentInfo.TotalSize)
 
-	d, u, l := R.bitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.torrentInfo.pieceSize)
+	d, u, l := R.bitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.torrentInfo.PieceSize)
 
-	R.addAnnounce(d, u, l, (float32(d)/float32(R.torrentInfo.totalSize))*100)
+	R.addAnnounce(d, u, l, (float32(d)/float32(R.torrentInfo.TotalSize))*100)
 }
 func (R *ratioSpoofState) decreaseTimer() {
 	for {
@@ -367,7 +368,7 @@ func (R *ratioSpoofState) changeCurrentTimer(newAnnounceRate int) {
 }
 
 func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
-	for idx, baseUrl := range R.torrentInfo.trackerInfo.urls {
+	for idx, baseUrl := range R.trackerState.urls {
 		completeURL := buildFullUrl(baseUrl, query)
 		R.lastAnounceRequest = completeURL
 		req, _ := http.NewRequest("GET", completeURL, nil)
@@ -390,7 +391,7 @@ func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
 				R.lastTackerResponse = string(bytesR)
 				decodedResp := beencode.Decode(bytesR)
 				if idx != 0 {
-					R.torrentInfo.trackerInfo.SwapFirst(idx)
+					R.trackerState.SwapFirst(idx)
 				}
 				ret := extractTrackerResponse(decodedResp)
 				return &ret
@@ -421,69 +422,6 @@ func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, 
 		return limitTotalBytes
 	}
 	return totalCandidate
-}
-
-func extractInfoHashURLEncoded(rawData []byte, torrentData map[string]interface{}) string {
-	byteOffsets := torrentData["info"].(map[string]interface{})["byte_offsets"].([]int)
-	h := sha1.New()
-	h.Write([]byte(rawData[byteOffsets[0]:byteOffsets[1]]))
-	ret := h.Sum(nil)
-	var buf bytes.Buffer
-	re := regexp.MustCompile(`[a-zA-Z0-9\.\-\_\~]`)
-	for _, b := range ret {
-		if re.Match([]byte{b}) {
-			buf.WriteByte(b)
-		} else {
-			buf.WriteString(fmt.Sprintf("%%%02x", b))
-		}
-	}
-	return buf.String()
-
-}
-func extractTotalSize(torrentData map[string]interface{}) int {
-	if value, ok := torrentData["info"].(map[string]interface{})["length"]; ok {
-		return value.(int)
-	}
-
-	var total int
-
-	for _, file := range torrentData["info"].(map[string]interface{})["files"].([]interface{}) {
-		total += file.(map[string]interface{})["length"].(int)
-	}
-	return total
-}
-
-func extractTrackerInfo(torrentData map[string]interface{}) trackerInfo {
-	uniqueUrls := make(map[string]int)
-	currentCount := 0
-	if main, ok := torrentData["announce"]; ok && strings.HasPrefix(main.(string), "http") {
-		if _, found := uniqueUrls[main.(string)]; !found {
-			uniqueUrls[main.(string)] = currentCount
-			currentCount++
-		}
-	}
-	if list, ok := torrentData["announce-list"]; ok {
-		for _, innerList := range list.([]interface{}) {
-			for _, item := range innerList.([]interface{}) {
-				if _, found := uniqueUrls[item.(string)]; !found && strings.HasPrefix(item.(string), "http") {
-					uniqueUrls[item.(string)] = currentCount
-					currentCount++
-				}
-			}
-		}
-
-	}
-	trackerInfo := trackerInfo{urls: make([]string, len(uniqueUrls))}
-	for key, value := range uniqueUrls {
-		trackerInfo.urls[value] = key
-	}
-
-	trackerInfo.main = trackerInfo.urls[0]
-
-	if len(trackerInfo.urls) == 0 {
-		panic("No tcp/http tracker url announce found'")
-	}
-	return trackerInfo
 }
 
 func extractTrackerResponse(datatrackerResponse map[string]interface{}) trackerResponse {
