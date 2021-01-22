@@ -1,4 +1,4 @@
-package beencode
+package bencode
 
 import (
 	"io/ioutil"
