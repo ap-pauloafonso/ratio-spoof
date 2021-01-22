@@ -267,10 +267,10 @@ func (R *ratioSpoofState) firstAnnounce() {
 }
 
 func (R *ratioSpoofState) updateInterval(resp trackerResponse) {
-	if resp.minInterval > 0 {
-		R.announceInterval = resp.minInterval
-	} else {
+	if resp.interval > 0 {
 		R.announceInterval = resp.interval
+	} else {
+		R.announceInterval = 1800
 	}
 }
 
@@ -368,8 +368,8 @@ func (R *ratioSpoofState) changeCurrentTimer(newAnnounceRate int) {
 }
 
 func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
-	for idx, url := range R.torrentInfo.TrackerInfo.Urls {
-		completeURL := url + "?" + strings.TrimLeft(query, "?")
+	for idx, baseUrl := range R.trackerState.urls {
+		completeURL := buildFullUrl(baseUrl, query)
 		R.lastAnounceRequest = completeURL
 		req, _ := http.NewRequest("GET", completeURL, nil)
 		for header, value := range R.bitTorrentClient.Headers() {
@@ -401,6 +401,13 @@ func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
 	}
 	panic("Connection error with the tracker")
 
+}
+
+func buildFullUrl(baseurl, query string) string {
+	if len(strings.Split(baseurl, "?")) > 1 {
+		return baseurl + "&" + strings.TrimLeft(query, "&")
+	}
+	return baseurl + "?" + strings.TrimLeft(query, "?")
 }
 
 func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {

@@ -1,8 +1,10 @@
 package beencode
 
 import (
+	"bytes"
 	"crypto/sha1"
-	"net/url"
+	"fmt"
+	"regexp"
 	"strconv"
 )
 
@@ -56,12 +58,20 @@ func TorrentDictParse(dat []byte) (*TorrentInfo, error) {
 }
 
 func (T *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
-	byteOffsets := T.resultMap[torrentInfoKey].(map[string]interface{})[torrentDictOffsetsKey].([]int)
+	byteOffsets := T.resultMap["info"].(map[string]interface{})["byte_offsets"].([]int)
 	h := sha1.New()
 	h.Write([]byte(rawData[byteOffsets[0]:byteOffsets[1]]))
 	ret := h.Sum(nil)
-	return url.QueryEscape(string(ret))
-
+	var buf bytes.Buffer
+	re := regexp.MustCompile(`[a-zA-Z0-9\.\-\_\~]`)
+	for _, b := range ret {
+		if re.Match([]byte{b}) {
+			buf.WriteByte(b)
+		} else {
+			buf.WriteString(fmt.Sprintf("%%%02x", b))
+		}
+	}
+	return buf.String()
 }
 
 func (T *torrentDict) extractTotalSize() int {
