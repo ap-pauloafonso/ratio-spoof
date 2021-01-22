@@ -1,4 +1,4 @@
-package beencode
+package bencode
 
 import (
 	"bytes"
@@ -25,7 +25,7 @@ const (
 	torrentDictOffsetsKey = "byte_offsets"
 )
 
-// TorrentInfo contains all relevant information extracted from a beencode file
+// TorrentInfo contains all relevant information extracted from a bencode file
 type TorrentInfo struct {
 	Name               string
 	PieceSize          int
@@ -44,7 +44,7 @@ type torrentDict struct {
 	resultMap map[string]interface{}
 }
 
-//TorrentDictParse decodes the beencoded bytes and builds the torrentInfo file
+//TorrentDictParse decodes the bencoded bytes and builds the torrentInfo file
 func TorrentDictParse(dat []byte) (*TorrentInfo, error) {
 	dict, _ := mapParse(0, &dat)
 	torrentMap := torrentDict{resultMap: dict}
@@ -133,7 +133,7 @@ func findParse(currentIdx int, data *[]byte) (result interface{}, nextIdx int) {
 	case token >= byte('0') || token <= byte('9'):
 		return stringParse(currentIdx, data)
 	default:
-		panic("Error decoding beencode")
+		panic("Error decoding bencode")
 	}
 }
 

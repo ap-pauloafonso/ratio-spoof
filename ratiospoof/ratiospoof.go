@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ap-pauloafonso/ratio-spoof/beencode"
+	"github.com/ap-pauloafonso/ratio-spoof/bencode"
 	"github.com/gammazero/deque"
 )
 
@@ -31,7 +31,7 @@ var validSpeedSufixes = [...]string{"kbps", "mbps"}
 type ratioSpoofState struct {
 	mutex                *sync.Mutex
 	httpClient           HttpClient
-	torrentInfo          *beencode.TorrentInfo
+	torrentInfo          *bencode.TorrentInfo
 	input                *inputParsed
 	trackerState         *httpTracker
 	bitTorrentClient     TorrentClientEmulation
@@ -51,7 +51,7 @@ type httpTracker struct {
 	urls []string
 }
 
-func newHttpTracker(torrentInfo *beencode.TorrentInfo) (*httpTracker, error) {
+func newHttpTracker(torrentInfo *bencode.TorrentInfo) (*httpTracker, error) {
 
 	var result []string
 	for _, url := range torrentInfo.TrackerInfo.Urls {
@@ -91,7 +91,7 @@ type inputParsed struct {
 	debug             bool
 }
 
-func (I *InputArgs) parseInput(torrentInfo *beencode.TorrentInfo) (*inputParsed, error) {
+func (I *InputArgs) parseInput(torrentInfo *bencode.TorrentInfo) (*inputParsed, error) {
 	downloaded, err := extractInputInitialByteCount(I.InitialDownloaded, torrentInfo.TotalSize, true)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func NewRatioSPoofState(input InputArgs, torrentClient TorrentClientEmulation, h
 		return nil, err
 	}
 
-	torrentInfo, err := beencode.TorrentDictParse(dat)
+	torrentInfo, err := bencode.TorrentDictParse(dat)
 	if err != nil {
 		panic(err)
 	}
@@ -389,7 +389,7 @@ func (R *ratioSpoofState) tryMakeRequest(query string) *trackerResponse {
 					gzipReader.Close()
 				}
 				R.lastTackerResponse = string(bytesR)
-				decodedResp := beencode.Decode(bytesR)
+				decodedResp := bencode.Decode(bytesR)
 				if idx != 0 {
 					R.trackerState.SwapFirst(idx)
 				}
