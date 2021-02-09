@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/ap-pauloafonso/ratio-spoof/emulation"
-	"github.com/ap-pauloafonso/ratio-spoof/ratiospoof"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/printer"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
 )
 
 func main() {
@@ -50,8 +51,8 @@ required arguments:
 	}
 
 	qbit := emulation.NewQbitTorrent()
-	r, err := ratiospoof.NewRatioSPoofState(
-		ratiospoof.InputArgs{
+	r, err := ratiospoof.NewRatioSpoofState(
+		input.InputArgs{
 			TorrentPath:       *torrentPath,
 			InitialDownloaded: *initialDownload,
 			DownloadSpeed:     *downloadSpeed,
@@ -60,12 +61,13 @@ required arguments:
 			Port:              *port,
 			Debug:             *debug,
 		},
-		qbit,
-		http.DefaultClient)
+		qbit)
 
 	if err != nil {
 		panic(err)
 	}
+
+	go printer.PrintState(r)
 	r.Run()
 
 }
