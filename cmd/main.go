@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
@@ -64,7 +65,7 @@ required arguments:
 		qbit)
 
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 
 	go printer.PrintState(r)
