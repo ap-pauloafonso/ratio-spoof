@@ -46,42 +46,37 @@ func (T *HttpTracker) SwapFirst(currentIdx int) {
 	T.Urls[currentIdx] = aux
 }
 
-func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, timerUpdateChannel chan<- int) *TrackerResponse {
-	var trackerResp *TrackerResponse
+func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, timerUpdateChannel chan<- int) (*TrackerResponse, error) {
+	defer func() {
+		T.RetryAttempt = 0
+	}()
 	if retry {
 		retryDelay := 30 * time.Second
 		for {
-			exit := false
-			func() {
-				defer func() {
-					if err := recover(); err != nil {
-						timerUpdateChannel <- int(retryDelay.Seconds())
-						T.RetryAttempt++
-						time.Sleep(retryDelay)
-						retryDelay *= 2
-						if retryDelay.Seconds() > 900 {
-							retryDelay = 900
-						}
-					}
-				}()
-				trackerResp = T.tryMakeRequest(query, headers)
-				exit = true
-			}()
-			if exit {
-				break
+			trackerResp, err := T.tryMakeRequest(query, headers)
+			if err != nil {
+				timerUpdateChannel <- int(retryDelay.Seconds())
+				T.RetryAttempt++
+				time.Sleep(retryDelay)
+				retryDelay *= 2
+				if retryDelay.Seconds() > 900 {
+					retryDelay = 900
+				}
+				continue
 			}
+			return trackerResp, nil
 		}
 
 	} else {
-		trackerResp = T.tryMakeRequest(query, headers)
+		resp, err := T.tryMakeRequest(query, headers)
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 	}
-	T.RetryAttempt = 0
-
-	return trackerResp
-
 }
 
-func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) *TrackerResponse {
+func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) (*TrackerResponse, error) {
 	for idx, baseUrl := range t.Urls {
 		completeURL := buildFullUrl(baseUrl, query)
 		t.LastAnounceRequest = completeURL
@@ -94,7 +89,7 @@ func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) *T
 			if resp.StatusCode == http.StatusOK {
 				bytesR, _ := ioutil.ReadAll(resp.Body)
 				if len(bytesR) == 0 {
-					return nil
+					continue
 				}
 				mimeType := http.DetectContentType(bytesR)
 				if mimeType == "application/x-gzip" {
@@ -103,17 +98,24 @@ func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) *T
 					gzipReader.Close()
 				}
 				t.LastTackerResponse = string(bytesR)
-				decodedResp := bencode.Decode(bytesR)
+				decodedResp, err := bencode.Decode(bytesR)
+				if err != nil {
+					continue
+				}
+				ret, err := extractTrackerResponse(decodedResp)
+				if err != nil {
+					continue
+				}
 				if idx != 0 {
 					t.SwapFirst(idx)
 				}
-				ret := extractTrackerResponse(decodedResp)
-				return &ret
+
+				return &ret, nil
 			}
 			resp.Body.Close()
 		}
 	}
-	panic("Connection error with the tracker")
+	return nil, errors.New("Connection error with the tracker")
 
 }
 
@@ -124,15 +126,15 @@ func buildFullUrl(baseurl, query string) string {
 	return baseurl + "?" + strings.TrimLeft(query, "?")
 }
 
-func extractTrackerResponse(datatrackerResponse map[string]interface{}) TrackerResponse {
+func extractTrackerResponse(datatrackerResponse map[string]interface{}) (TrackerResponse, error) {
 	var result TrackerResponse
 	if v, ok := datatrackerResponse["failure reason"].(string); ok && len(v) > 0 {
-		panic(errors.New(v))
+		return result, errors.New(v)
 	}
 	result.MinInterval, _ = datatrackerResponse["min interval"].(int)
 	result.Interval, _ = datatrackerResponse["interval"].(int)
 	result.Seeders, _ = datatrackerResponse["complete"].(int)
 	result.Leechers, _ = datatrackerResponse["incomplete"].(int)
-	return result
+	return result, nil
 
 }

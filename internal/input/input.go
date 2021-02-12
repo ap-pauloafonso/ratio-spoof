@@ -10,6 +10,12 @@ import (
 	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 )
 
+const (
+	minPortNumber     = 1
+	maxPortNumber     = 65535
+	speedSuffixLength = 4
+)
+
 type InputArgs struct {
 	TorrentPath       string
 	InitialDownloaded string
@@ -51,8 +57,8 @@ func (I *InputArgs) ParseInput(torrentInfo *bencode.TorrentInfo) (*InputParsed, 
 		return nil, err
 	}
 
-	if I.Port < 1 || I.Port > 65535 {
-		return nil, errors.New("port number must be between 1 and 65535")
+	if I.Port < minPortNumber || I.Port > maxPortNumber {
+		return nil, errors.New(fmt.Sprint("port number must be between %i and %i", minPortNumber, maxPortNumber))
 	}
 
 	return &InputParsed{InitialDownloaded: downloaded,
@@ -75,7 +81,10 @@ func checkSpeedSufix(input string) (valid bool, suffix string) {
 }
 
 func extractInputInitialByteCount(initialSizeInput string, totalBytes int, errorIfHigher bool) (int, error) {
-	byteCount := strSize2ByteSize(initialSizeInput, totalBytes)
+	byteCount, err := strSize2ByteSize(initialSizeInput, totalBytes)
+	if err != nil {
+		return 0, err
+	}
 	if errorIfHigher && byteCount > totalBytes {
 		return 0, errors.New("initial downloaded can not be higher than the torrent size")
 	}
@@ -84,66 +93,96 @@ func extractInputInitialByteCount(initialSizeInput string, totalBytes int, error
 	}
 	return byteCount, nil
 }
+
+//Takes an dirty speed input and returns the bytes per second based on the suffixes
+// example 1kbps(string) > 1024 bytes per second (int)
 func extractInputByteSpeed(initialSpeedInput string) (int, error) {
 	ok, suffix := checkSpeedSufix(initialSpeedInput)
 	if !ok {
 		return 0, fmt.Errorf("speed must be in %v", validSpeedSufixes)
 	}
-	number, _ := strconv.ParseFloat(initialSpeedInput[:len(initialSpeedInput)-4], 64)
-	if number < 0 {
+	speedVal, err := strconv.ParseFloat(initialSpeedInput[:len(initialSpeedInput)-speedSuffixLength], 64)
+	if err != nil {
+		return 0, errors.New("invalid speed number")
+	}
+	if speedVal < 0 {
 		return 0, errors.New("speed can not be negative")
 	}
 
 	if suffix == "kbps" {
-		number *= 1024
+		speedVal *= 1024
 	} else {
-		number = number * 1024 * 1024
+		speedVal = speedVal * 1024 * 1024
 	}
-	ret := int(number)
+	ret := int(speedVal)
 	return ret, nil
 }
 
-func strSize2ByteSize(input string, totalSize int) int {
-	lowerInput := strings.ToLower(input)
-
-	parseStrNumberFn := func(strWithSufix string, sufixLength, n int) int {
-		v, _ := strconv.ParseFloat(strWithSufix[:len(lowerInput)-sufixLength], 64)
-		result := v * math.Pow(1024, float64(n))
-		return int(result)
+func extractByteSizeNumber(strWithSufix string, sufixLength, power int) (int, error) {
+	v, err := strconv.ParseFloat(strWithSufix[:len(strWithSufix)-sufixLength], 64)
+	if err != nil {
+		return 0, err
 	}
+	result := v * math.Pow(1024, float64(power))
+	return int(result), nil
+}
+
+func strSize2ByteSize(input string, totalSize int) (int, error) {
+	lowerInput := strings.ToLower(input)
+	invalidSizeError := errors.New("invalid input size")
 	switch {
 	case strings.HasSuffix(lowerInput, "kb"):
 		{
-			return parseStrNumberFn(lowerInput, 2, 1)
+			v, err := extractByteSizeNumber(lowerInput, 2, 1)
+			if err != nil {
+				return 0, invalidSizeError
+			}
+			return v, nil
 		}
 	case strings.HasSuffix(lowerInput, "mb"):
 		{
-			return parseStrNumberFn(lowerInput, 2, 2)
+			v, err := extractByteSizeNumber(lowerInput, 2, 2)
+			if err != nil {
+				return 0, invalidSizeError
+			}
+			return v, nil
 		}
 	case strings.HasSuffix(lowerInput, "gb"):
 		{
-			return parseStrNumberFn(lowerInput, 2, 3)
+			v, err := extractByteSizeNumber(lowerInput, 2, 3)
+			if err != nil {
+				return 0, invalidSizeError
+			}
+			return v, nil
 		}
 	case strings.HasSuffix(lowerInput, "tb"):
 		{
-			return parseStrNumberFn(lowerInput, 2, 4)
+			v, err := extractByteSizeNumber(lowerInput, 2, 4)
+			if err != nil {
+				return 0, invalidSizeError
+			}
+			return v, nil
 		}
 	case strings.HasSuffix(lowerInput, "b"):
 		{
-			return parseStrNumberFn(lowerInput, 1, 0)
+			v, err := extractByteSizeNumber(lowerInput, 1, 0)
+			if err != nil {
+				return 0, invalidSizeError
+			}
+			return v, nil
 		}
 	case strings.HasSuffix(lowerInput, "%"):
 		{
-			v, _ := strconv.ParseFloat(lowerInput[:len(lowerInput)-1], 64)
-			if v < 0 || v > 100 {
-				panic("percent value must be in (0-100)")
+			v, err := strconv.ParseFloat(lowerInput[:len(lowerInput)-1], 64)
+			if v < 0 || v > 100 || err != nil {
+				return 0, errors.New("percent value must be in (0-100)")
 			}
 			result := int(float64(v/100) * float64(totalSize))
 
-			return result
+			return result, nil
 		}
 
 	default:
-		panic("Size not found")
+		return 0, errors.New("Size not found")
 	}
 }

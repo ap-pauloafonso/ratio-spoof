@@ -1,8 +1,10 @@
 package ratiospoof
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -70,17 +72,17 @@ func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulat
 
 	torrentInfo, err := bencode.TorrentDictParse(dat)
 	if err != nil {
-		panic(err)
+		return nil, errors.New("failed to parse the torrent file")
 	}
 
 	httpTracker, err := tracker.NewHttpTracker(torrentInfo, changeTimerCh)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	inputParsed, err := input.ParseInput(torrentInfo)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &RatioSpoof{
@@ -108,6 +110,8 @@ func (R *RatioSpoof) gracefullyExit() {
 	R.Status = "stopped"
 	R.NumWant = 0
 	R.fireAnnounce(false)
+	fmt.Printf("Gracefully exited successfully.\n")
+
 }
 
 func (R *RatioSpoof) Run() {
@@ -150,7 +154,7 @@ func (R *RatioSpoof) addAnnounce(currentDownloaded, currentUploaded, currentLeft
 	R.AnnounceCount++
 	R.AnnounceHistory.pushValueHistory(AnnounceEntry{Count: R.AnnounceCount, Downloaded: currentDownloaded, Uploaded: currentUploaded, Left: currentLeft, PercentDownloaded: percentDownloaded})
 }
-func (R *RatioSpoof) fireAnnounce(retry bool) {
+func (R *RatioSpoof) fireAnnounce(retry bool) error {
 	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.TorrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(R.Input.Port),
@@ -162,12 +166,16 @@ func (R *RatioSpoof) fireAnnounce(retry bool) {
 		"{event}", R.Status,
 		"{numwant}", fmt.Sprint(R.NumWant))
 	query := replacer.Replace(R.BitTorrentClient.Query())
-	trackerResp := R.Tracker.Announce(query, R.BitTorrentClient.Headers(), retry, R.timerUpdateCh)
+	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers(), retry, R.timerUpdateCh)
+	if err != nil {
+		log.Fatalf("failed to reach the tracker:\n%s ", err.Error())
+	}
 
 	if trackerResp != nil {
 		R.updateSeedersAndLeechers(*trackerResp)
 		R.updateInterval(*trackerResp)
 	}
+	return nil
 }
 func (R *RatioSpoof) generateNextAnnounce() {
 	R.timerUpdateCh <- R.AnnounceInterval
