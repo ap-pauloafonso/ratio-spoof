@@ -45,7 +45,13 @@ type torrentDict struct {
 }
 
 //TorrentDictParse decodes the bencoded bytes and builds the torrentInfo file
-func TorrentDictParse(dat []byte) (*TorrentInfo, error) {
+func TorrentDictParse(dat []byte) (torrent *TorrentInfo, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			err = e.(error)
+		}
+	}()
+
 	dict, _ := mapParse(0, &dat)
 	torrentMap := torrentDict{resultMap: dict}
 	return &TorrentInfo{
@@ -54,7 +60,7 @@ func TorrentDictParse(dat []byte) (*TorrentInfo, error) {
 		TotalSize:          torrentMap.extractTotalSize(),
 		TrackerInfo:        torrentMap.extractTrackerInfo(),
 		InfoHashURLEncoded: torrentMap.extractInfoHashURLEncoded(dat),
-	}, nil
+	}, err
 }
 
 func (T *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
@@ -115,10 +121,16 @@ func (T *torrentDict) extractTrackerInfo() *TrackerInfo {
 	return &trackerInfo
 }
 
-//Decode accepts a byte slice and returns a map with information parsed.(panic if it fails)
-func Decode(data []byte) map[string]interface{} {
+//Decode accepts a byte slice and returns a map with information parsed.
+func Decode(data []byte) (dataMap map[string]interface{}, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			err = e.(error)
+		}
+	}()
+
 	result, _ := findParse(0, &data)
-	return result.(map[string]interface{})
+	return result.(map[string]interface{}), err
 }
 
 func findParse(currentIdx int, data *[]byte) (result interface{}, nextIdx int) {

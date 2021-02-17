@@ -106,7 +106,8 @@ func TestDecode(T *testing.T) {
 	for _, f := range files {
 		T.Run(f.Name(), func(t *testing.T) {
 			data, _ := ioutil.ReadFile("./torrent_files_test/" + f.Name())
-			t.Log(Decode(data)["info"].(map[string]interface{})["name"])
+			result, _ := Decode(data)
+			t.Log(result["info"].(map[string]interface{})["name"])
 		})
 	}
 

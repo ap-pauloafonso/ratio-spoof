@@ -1,4 +1,4 @@
-package ratiospoof
+package printer
 
 import (
 	"fmt"
