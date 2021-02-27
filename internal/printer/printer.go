@@ -10,12 +10,13 @@ import (
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
 	"github.com/olekukonko/ts"
+	log "github.com/sirupsen/logrus"
 )
 
 func PrintState(state *ratiospoof.RatioSpoof) {
 	exit := false
 	go func() {
-		_ = <-state.StopPrintCH
+		<-state.StopPrintCH
 		exit = true
 	}()
 
@@ -62,12 +63,14 @@ func PrintState(state *ratiospoof.RatioSpoof) {
 				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced\n", dequeItem.Count, humanReadableSize(float64(dequeItem.Downloaded)), dequeItem.PercentDownloaded, humanReadableSize(float64(dequeItem.Left)), humanReadableSize(float64(dequeItem.Uploaded)))
 			}
 			lastDequeItem := state.AnnounceHistory.At(state.AnnounceHistory.Len() - 1).(ratiospoof.AnnounceEntry)
+			nextAnnounceSeconds := time.Until(state.NextAnnounce) * time.Second
+
 			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.Count,
 				humanReadableSize(float64(lastDequeItem.Downloaded)),
 				lastDequeItem.PercentDownloaded,
 				humanReadableSize(float64(lastDequeItem.Left)),
 				humanReadableSize(float64(lastDequeItem.Uploaded)),
-				fmtDuration(state.CurrentAnnounceTimer),
+				nextAnnounceSeconds,
 				retryStr)
 
 			if state.Input.Debug {
@@ -91,7 +94,9 @@ func clear() {
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command("cmd", "/c", "cls")
 		cmd.Stdout = os.Stdout
-		cmd.Run()
+		if err := cmd.Run(); err != nil {
+			log.Warn("Failed to run printer.clear()", err)
+		}
 	} else {
 		fmt.Print("\033c")
 	}
@@ -112,9 +117,4 @@ func humanReadableSize(byteSize float64) string {
 		byteSize /= 1024.0
 	}
 	return fmt.Sprintf("%.2f%v", byteSize, unitFound)
-}
-
-func fmtDuration(seconds int) string {
-	d := time.Duration(seconds) * time.Second
-	return fmt.Sprintf("%s", d)
 }

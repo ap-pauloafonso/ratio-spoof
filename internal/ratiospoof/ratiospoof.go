@@ -4,19 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
+
+	"github.com/gammazero/deque"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/tracker"
-	"github.com/gammazero/deque"
 )
 
 const (
@@ -24,21 +24,20 @@ const (
 )
 
 type RatioSpoof struct {
-	mutex                *sync.Mutex
-	TorrentInfo          *bencode.TorrentInfo
-	Input                *input.InputParsed
-	Tracker              *tracker.HttpTracker
-	BitTorrentClient     TorrentClientEmulation
-	CurrentAnnounceTimer int
-	AnnounceInterval     int
-	NumWant              int
-	Seeders              int
-	Leechers             int
-	AnnounceCount        int
-	Status               string
-	AnnounceHistory      announceHistory
-	timerUpdateCh        chan int
-	StopPrintCH          chan interface{}
+	TorrentInfo      *bencode.TorrentInfo
+	Input            *input.InputParsed
+	Tracker          *tracker.HttpTracker
+	BitTorrentClient TorrentClientEmulation
+	NextAnnounce     time.Time
+	AnnounceInterval int
+	NumWant          int
+	Seeders          int
+	Leechers         int
+	AnnounceCount    int
+	Status           string
+	AnnounceHistory  announceHistory
+	timerUpdateCh    chan int
+	StopPrintCH      chan interface{}
 }
 
 type TorrentClientEmulation interface {
@@ -92,7 +91,6 @@ func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulat
 		Input:            inputParsed,
 		NumWant:          200,
 		Status:           "started",
-		mutex:            &sync.Mutex{},
 		timerUpdateCh:    changeTimerCh,
 		StopPrintCH:      stopPrintCh,
 	}, nil
@@ -109,33 +107,53 @@ func (R *RatioSpoof) gracefullyExit() {
 	fmt.Printf("\nGracefully exiting...\n")
 	R.Status = "stopped"
 	R.NumWant = 0
-	R.fireAnnounce(false)
+
+	if err := R.fireAnnounce(false); err != nil {
+		log.Info("final fireAnnounce failed")
+	}
+
 	fmt.Printf("Gracefully exited successfully.\n")
 
 }
 
 func (R *RatioSpoof) Run() {
 	rand.Seed(time.Now().UnixNano())
-	sigCh := make(chan os.Signal)
-
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
-	go R.decreaseTimer()
-	go R.updateTimer()
-	go func() {
-		for {
+
+	duration := time.Duration(R.AnnounceInterval) * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	runLoop := true
+
+	for runLoop {
+		select {
+		case <-ticker.C:
+			//TODO: Eliminate shared state
+			R.NextAnnounce = time.Now().Add(duration)
+
+			if err := R.fireAnnounce(true); err != nil {
+				//Log and continue (maintains former functionality)
+				log.Warn("failed to fire announce", err)
+			}
+
 			R.generateNextAnnounce()
-			time.Sleep(time.Duration(R.AnnounceInterval) * time.Second)
-			R.fireAnnounce(true)
+		case <-sigCh:
+			fmt.Println("done")
+			runLoop = false
 		}
-	}()
-	<-sigCh
+	}
+
 	R.StopPrintCH <- "exit print"
 	R.gracefullyExit()
 }
 func (R *RatioSpoof) firstAnnounce() {
 	R.addAnnounce(R.Input.InitialDownloaded, R.Input.InitialUploaded, calculateBytesLeft(R.Input.InitialDownloaded, R.TorrentInfo.TotalSize), (float32(R.Input.InitialDownloaded)/float32(R.TorrentInfo.TotalSize))*100)
-	R.fireAnnounce(false)
+	if err := R.fireAnnounce(false); err != nil {
+		log.Warn("failed to fire first announce", err)
+	}
 }
 
 func (R *RatioSpoof) updateInterval(resp tracker.TrackerResponse) {
@@ -155,6 +173,12 @@ func (R *RatioSpoof) addAnnounce(currentDownloaded, currentUploaded, currentLeft
 	R.AnnounceHistory.pushValueHistory(AnnounceEntry{Count: R.AnnounceCount, Downloaded: currentDownloaded, Uploaded: currentUploaded, Left: currentLeft, PercentDownloaded: percentDownloaded})
 }
 func (R *RatioSpoof) fireAnnounce(retry bool) error {
+	//Guard against empty queue, Back() panics when empty
+	if R.AnnounceHistory.Len() == 0 {
+		log.Info("skipping fireAnnounce, queue empty")
+		return nil
+	}
+
 	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.TorrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(R.Input.Port),
@@ -197,25 +221,6 @@ func (R *RatioSpoof) generateNextAnnounce() {
 	d, u, l := R.BitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
 
 	R.addAnnounce(d, u, l, (float32(d)/float32(R.TorrentInfo.TotalSize))*100)
-}
-func (R *RatioSpoof) decreaseTimer() {
-	for {
-		time.Sleep(1 * time.Second)
-		R.mutex.Lock()
-		if R.CurrentAnnounceTimer > 0 {
-			R.CurrentAnnounceTimer--
-		}
-		R.mutex.Unlock()
-	}
-}
-
-func (R *RatioSpoof) updateTimer() {
-	for {
-		newValue := <-R.timerUpdateCh
-		R.mutex.Lock()
-		R.CurrentAnnounceTimer = newValue
-		R.mutex.Unlock()
-	}
 }
 
 func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
