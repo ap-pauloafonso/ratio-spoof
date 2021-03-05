@@ -26,7 +26,7 @@ type TrackerResponse struct {
 	Leechers    int
 }
 
-func NewHttpTracker(torrentInfo *bencode.TorrentInfo, timerChangeChannel chan<- int) (*HttpTracker, error) {
+func NewHttpTracker(torrentInfo *bencode.TorrentInfo) (*HttpTracker, error) {
 
 	var result []string
 	for _, url := range torrentInfo.TrackerInfo.Urls {
@@ -46,20 +46,20 @@ func (T *HttpTracker) SwapFirst(currentIdx int) {
 	T.Urls[currentIdx] = aux
 }
 
-func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, timerUpdateChannel chan<- int) (*TrackerResponse, error) {
+func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, estimatedTimeToAnnounceUpdateCh chan<- int) (*TrackerResponse, error) {
 	defer func() {
 		T.RetryAttempt = 0
 	}()
 	if retry {
-		retryDelay := 30 * time.Second
+		retryDelay := 30
 		for {
 			trackerResp, err := T.tryMakeRequest(query, headers)
 			if err != nil {
-				timerUpdateChannel <- int(retryDelay.Seconds())
+				estimatedTimeToAnnounceUpdateCh <- retryDelay
 				T.RetryAttempt++
-				time.Sleep(retryDelay)
+				time.Sleep(time.Duration(retryDelay) * time.Second)
 				retryDelay *= 2
-				if retryDelay.Seconds() > 900 {
+				if retryDelay > 900 {
 					retryDelay = 900
 				}
 				continue

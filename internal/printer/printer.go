@@ -62,12 +62,14 @@ func PrintState(state *ratiospoof.RatioSpoof) {
 				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced\n", dequeItem.Count, humanReadableSize(float64(dequeItem.Downloaded)), dequeItem.PercentDownloaded, humanReadableSize(float64(dequeItem.Left)), humanReadableSize(float64(dequeItem.Uploaded)))
 			}
 			lastDequeItem := state.AnnounceHistory.At(state.AnnounceHistory.Len() - 1).(ratiospoof.AnnounceEntry)
+
+			remaining := time.Until(state.EstimatedTimeToAnnounce)
 			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.Count,
 				humanReadableSize(float64(lastDequeItem.Downloaded)),
 				lastDequeItem.PercentDownloaded,
 				humanReadableSize(float64(lastDequeItem.Left)),
 				humanReadableSize(float64(lastDequeItem.Uploaded)),
-				fmtDuration(state.CurrentAnnounceTimer),
+				fmtDuration(remaining),
 				retryStr)
 
 			if state.Input.Debug {
@@ -114,7 +116,9 @@ func humanReadableSize(byteSize float64) string {
 	return fmt.Sprintf("%.2f%v", byteSize, unitFound)
 }
 
-func fmtDuration(seconds int) string {
-	d := time.Duration(seconds) * time.Second
-	return fmt.Sprintf("%s", d)
+func fmtDuration(d time.Duration) string {
+	if d.Seconds() < 0 {
+		return fmt.Sprintf("%s", 0*time.Second)
+	}
+	return fmt.Sprintf("%s", time.Duration(int(d.Seconds()))*time.Second)
 }

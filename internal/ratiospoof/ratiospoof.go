@@ -24,21 +24,21 @@ const (
 )
 
 type RatioSpoof struct {
-	mutex                *sync.Mutex
-	TorrentInfo          *bencode.TorrentInfo
-	Input                *input.InputParsed
-	Tracker              *tracker.HttpTracker
-	BitTorrentClient     TorrentClientEmulation
-	CurrentAnnounceTimer int
-	AnnounceInterval     int
-	NumWant              int
-	Seeders              int
-	Leechers             int
-	AnnounceCount        int
-	Status               string
-	AnnounceHistory      announceHistory
-	timerUpdateCh        chan int
-	StopPrintCH          chan interface{}
+	mutex                           *sync.Mutex
+	TorrentInfo                     *bencode.TorrentInfo
+	Input                           *input.InputParsed
+	Tracker                         *tracker.HttpTracker
+	BitTorrentClient                TorrentClientEmulation
+	AnnounceInterval                int
+	EstimatedTimeToAnnounce         time.Time
+	EstimatedTimeToAnnounceUpdateCh chan int
+	NumWant                         int
+	Seeders                         int
+	Leechers                        int
+	AnnounceCount                   int
+	Status                          string
+	AnnounceHistory                 announceHistory
+	StopPrintCH                     chan interface{}
 }
 
 type TorrentClientEmulation interface {
@@ -63,7 +63,7 @@ type announceHistory struct {
 }
 
 func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulation) (*RatioSpoof, error) {
-	changeTimerCh := make(chan int)
+	EstimatedTimeToAnnounceUpdateCh := make(chan int)
 	stopPrintCh := make(chan interface{})
 	dat, err := ioutil.ReadFile(input.TorrentPath)
 	if err != nil {
@@ -75,7 +75,7 @@ func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulat
 		return nil, errors.New("failed to parse the torrent file")
 	}
 
-	httpTracker, err := tracker.NewHttpTracker(torrentInfo, changeTimerCh)
+	httpTracker, err := tracker.NewHttpTracker(torrentInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -86,15 +86,15 @@ func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulat
 	}
 
 	return &RatioSpoof{
-		BitTorrentClient: torrentClient,
-		TorrentInfo:      torrentInfo,
-		Tracker:          httpTracker,
-		Input:            inputParsed,
-		NumWant:          200,
-		Status:           "started",
-		mutex:            &sync.Mutex{},
-		timerUpdateCh:    changeTimerCh,
-		StopPrintCH:      stopPrintCh,
+		BitTorrentClient:                torrentClient,
+		TorrentInfo:                     torrentInfo,
+		Tracker:                         httpTracker,
+		Input:                           inputParsed,
+		NumWant:                         200,
+		Status:                          "started",
+		mutex:                           &sync.Mutex{},
+		StopPrintCH:                     stopPrintCh,
+		EstimatedTimeToAnnounceUpdateCh: EstimatedTimeToAnnounceUpdateCh,
 	}, nil
 }
 
@@ -120,8 +120,7 @@ func (R *RatioSpoof) Run() {
 
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
-	go R.decreaseTimer()
-	go R.updateTimer()
+	go R.updateEstimatedTimeToAnnounceListener()
 	go func() {
 		for {
 			R.generateNextAnnounce()
@@ -138,11 +137,25 @@ func (R *RatioSpoof) firstAnnounce() {
 	R.fireAnnounce(false)
 }
 
-func (R *RatioSpoof) updateInterval(resp tracker.TrackerResponse) {
-	if resp.Interval > 0 {
-		R.AnnounceInterval = resp.Interval
+func (R *RatioSpoof) updateInterval(interval int) {
+	if interval > 0 {
+		R.AnnounceInterval = interval
 	} else {
 		R.AnnounceInterval = 1800
+	}
+	R.updateEstimatedTimeToAnnounce(R.AnnounceInterval)
+}
+
+func (R *RatioSpoof) updateEstimatedTimeToAnnounce(interval int) {
+	R.mutex.Lock()
+	defer R.mutex.Unlock()
+	R.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
+}
+
+func (R *RatioSpoof) updateEstimatedTimeToAnnounceListener() {
+	for {
+		interval := <-R.EstimatedTimeToAnnounceUpdateCh
+		R.updateEstimatedTimeToAnnounce(interval)
 	}
 }
 
@@ -166,19 +179,18 @@ func (R *RatioSpoof) fireAnnounce(retry bool) error {
 		"{event}", R.Status,
 		"{numwant}", fmt.Sprint(R.NumWant))
 	query := replacer.Replace(R.BitTorrentClient.Query())
-	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers(), retry, R.timerUpdateCh)
+	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers(), retry, R.EstimatedTimeToAnnounceUpdateCh)
 	if err != nil {
 		log.Fatalf("failed to reach the tracker:\n%s ", err.Error())
 	}
 
 	if trackerResp != nil {
 		R.updateSeedersAndLeechers(*trackerResp)
-		R.updateInterval(*trackerResp)
+		R.updateInterval(trackerResp.Interval)
 	}
 	return nil
 }
 func (R *RatioSpoof) generateNextAnnounce() {
-	R.timerUpdateCh <- R.AnnounceInterval
 	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
 	currentDownloaded := lastAnnounce.Downloaded
 	var downloadCandidate int
@@ -197,25 +209,6 @@ func (R *RatioSpoof) generateNextAnnounce() {
 	d, u, l := R.BitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
 
 	R.addAnnounce(d, u, l, (float32(d)/float32(R.TorrentInfo.TotalSize))*100)
-}
-func (R *RatioSpoof) decreaseTimer() {
-	for {
-		time.Sleep(1 * time.Second)
-		R.mutex.Lock()
-		if R.CurrentAnnounceTimer > 0 {
-			R.CurrentAnnounceTimer--
-		}
-		R.mutex.Unlock()
-	}
-}
-
-func (R *RatioSpoof) updateTimer() {
-	for {
-		newValue := <-R.timerUpdateCh
-		R.mutex.Lock()
-		R.CurrentAnnounceTimer = newValue
-		R.mutex.Unlock()
-	}
 }
 
 func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
