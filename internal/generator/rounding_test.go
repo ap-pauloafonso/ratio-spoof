@@ -5,7 +5,7 @@ import "testing"
 func TestNextAmountReport(t *testing.T) {
 	r, _ := NewRoundingGenerator("")
 
-	d, u, l := r.NextAmountReport(656497856, 46479878, 7879879, 1024)
+	d, u, l := r.Round(656497856, 46479878, 7879879, 1024)
 	//same
 	if d != 656497856 {
 		t.Errorf("[download]got %v want %v", d, 656497856)
