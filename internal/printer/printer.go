@@ -55,7 +55,7 @@ func PrintState(state *ratiospoof.RatioSpoof) {
 	Upload Speed: %v/s
 	Size: %v
 	Emulation: %v | Port: %v`, state.TorrentInfo.Name, state.TorrentInfo.TrackerInfo.Main, seedersStr, leechersStr, humanReadableSize(float64(state.Input.DownloadSpeed)),
-				humanReadableSize(float64(state.Input.UploadSpeed)), humanReadableSize(float64(state.TorrentInfo.TotalSize)), state.BitTorrentClient.Name(), state.Input.Port)
+				humanReadableSize(float64(state.Input.UploadSpeed)), humanReadableSize(float64(state.TorrentInfo.TotalSize)), state.BitTorrentClient.Name, state.Input.Port)
 			fmt.Printf("\n\n%s\n\n", center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
 			for i := 0; i <= state.AnnounceHistory.Len()-2; i++ {
 				dequeItem := state.AnnounceHistory.At(i).(ratiospoof.AnnounceEntry)

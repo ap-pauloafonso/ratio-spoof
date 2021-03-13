@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/printer"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
@@ -24,13 +23,15 @@ func main() {
 	//optional
 	port := flag.Int("p", 8999, "a PORT")
 	debug := flag.Bool("debug", false, "")
+	client := flag.String("c", "qbit-4.0.3", "emulated client")
 
 	flag.Usage = func() {
 		fmt.Printf("usage: %s -t <TORRENT_PATH> -d <INITIAL_DOWNLOADED> -ds <DOWNLOAD_SPEED> -u <INITIAL_UPLOADED> -us <UPLOAD_SPEED>\n", os.Args[0])
 		fmt.Print(`
 optional arguments:
 	-h           		show this help message and exit
-	-p [PORT]    		change the port number, the default is 8999
+	-p [PORT]    		change the port number, default: 8999
+	-c [CLIENT_CODE]	change the client emulation, default: qbit-4.0.3
 	  
 required arguments:
 	-t  <TORRENT_PATH>     
@@ -41,6 +42,7 @@ required arguments:
 	  
 <INITIAL_DOWNLOADED> and <INITIAL_UPLOADED> must be in %, b, kb, mb, gb, tb
 <DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps, mbps
+[CLIENT_CODE] options: qbit-4.0.3, qbit-4.3.2
 `)
 	}
 
@@ -51,7 +53,6 @@ required arguments:
 		return
 	}
 
-	qbit := emulation.NewQbitTorrent()
 	r, err := ratiospoof.NewRatioSpoofState(
 		input.InputArgs{
 			TorrentPath:       *torrentPath,
@@ -61,8 +62,8 @@ required arguments:
 			UploadSpeed:       *uploadSpeed,
 			Port:              *port,
 			Debug:             *debug,
-		},
-		qbit)
+			Client:            *client,
+		})
 
 	if err != nil {
 		log.Fatalln(err)
