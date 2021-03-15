@@ -168,11 +168,11 @@ func (R *RatioSpoof) fireAnnounce(retry bool) error {
 	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.TorrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(R.Input.Port),
-		"{peerid}", R.BitTorrentClient.PeerIdGenerator.PeerId(),
+		"{peerid}", R.BitTorrentClient.PeerId(),
 		"{uploaded}", fmt.Sprint(lastAnnounce.Uploaded),
 		"{downloaded}", fmt.Sprint(lastAnnounce.Downloaded),
 		"{left}", fmt.Sprint(lastAnnounce.Left),
-		"{key}", R.BitTorrentClient.KeyGenerator.Key(),
+		"{key}", R.BitTorrentClient.Key(),
 		"{event}", R.Status,
 		"{numwant}", fmt.Sprint(R.NumWant))
 	query := replacer.Replace(R.BitTorrentClient.Query)
@@ -203,7 +203,7 @@ func (R *RatioSpoof) generateNextAnnounce() {
 
 	leftCandidate := calculateBytesLeft(downloadCandidate, R.TorrentInfo.TotalSize)
 
-	d, u, l := R.BitTorrentClient.RoudingGenerator.Round(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
+	d, u, l := R.BitTorrentClient.Round(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
 
 	R.addAnnounce(d, u, l, (float32(d)/float32(R.TorrentInfo.TotalSize))*100)
 }

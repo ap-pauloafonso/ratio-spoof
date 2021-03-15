@@ -38,12 +38,12 @@ type RoundingGenerator interface {
 }
 
 type Emulation struct {
-	PeerIdGenerator  PeerIdGenerator
-	KeyGenerator     KeyGenerator
-	Query            string
-	Name             string
-	Headers          map[string]string
-	RoudingGenerator RoundingGenerator
+	PeerIdGenerator
+	KeyGenerator
+	Query   string
+	Name    string
+	Headers map[string]string
+	RoundingGenerator
 }
 
 func NewEmulation(code string) (*Emulation, error) {
@@ -67,7 +67,7 @@ func NewEmulation(code string) (*Emulation, error) {
 		return nil, err
 	}
 
-	return &Emulation{PeerIdGenerator: peerG, KeyGenerator: keyG, RoudingGenerator: roudingG,
+	return &Emulation{PeerIdGenerator: peerG, KeyGenerator: keyG, RoundingGenerator: roudingG,
 		Headers: c.Headers, Name: c.Name, Query: c.Query}, nil
 
 }

@@ -16,10 +16,10 @@ func TestNewEmulation(t *testing.T) {
 				t.Error("should not return error ")
 			}
 
-			peerId := e.PeerIdGenerator.PeerId()
-			key := e.KeyGenerator.Key()
+			peerId := e.PeerId()
+			key := e.Key()
 
-			d, u, l := e.RoudingGenerator.Round(2*1024*1024*1024, 1024*1024*1024, 3*1024*1024*1024, 1024)
+			d, u, l := e.Round(2*1024*1024*1024, 1024*1024*1024, 3*1024*1024*1024, 1024)
 
 			if peerId == "" {
 				t.Errorf("%s.json should be able to generate PeerId", code)
