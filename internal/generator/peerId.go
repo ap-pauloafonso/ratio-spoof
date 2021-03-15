@@ -8,7 +8,7 @@ type RegexPeerIdGenerator struct {
 	generated string
 }
 
-func NewRegexPeerIdGenerator(generatorCode, pattern string) (*RegexPeerIdGenerator, error) {
+func NewRegexPeerIdGenerator(pattern string) (*RegexPeerIdGenerator, error) {
 	result, err := regen.Generate(pattern)
 	if err != nil {
 		return nil, err

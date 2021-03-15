@@ -52,17 +52,17 @@ func NewEmulation(code string) (*Emulation, error) {
 		return nil, err
 	}
 
-	peerG, err := generator.NewRegexPeerIdGenerator(c.PeerID.Generator, c.PeerID.Regex)
+	peerG, err := generator.NewRegexPeerIdGenerator(c.PeerID.Regex)
 	if err != nil {
 		return nil, err
 	}
 
-	keyG, err := generator.NewDefaultKeyGenerator(c.Key.Generator)
+	keyG, err := generator.NewDefaultKeyGenerator()
 	if err != nil {
 		return nil, err
 	}
 
-	roudingG, err := generator.NewDefaultRoudingGenerator(c.Rounding.Generator)
+	roudingG, err := generator.NewDefaultRoudingGenerator()
 	if err != nil {
 		return nil, err
 	}

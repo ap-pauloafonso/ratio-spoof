@@ -2,7 +2,7 @@ package generator
 
 type DefaultRoundingGenerator struct{}
 
-func NewDefaultRoudingGenerator(code string) (*DefaultRoundingGenerator, error) {
+func NewDefaultRoudingGenerator() (*DefaultRoundingGenerator, error) {
 	return &DefaultRoundingGenerator{}, nil
 
 }
