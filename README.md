@@ -18,7 +18,7 @@ usage:
 
 optional arguments:
 	-h           		show this help message and exit
-	-p [PORT]    		change the port number, the default is 8999
+	-p [PORT]    		change the port number, default: 8999
 	-c [CLIENT_CODE]	change the client emulation, default: qbit-4.0.3
 	  
 required arguments:
@@ -30,7 +30,7 @@ required arguments:
 	  
 <INITIAL_DOWNLOADED> and <INITIAL_UPLOADED> must be in %, b, kb, mb, gb, tb
 <DOWNLOAD_SPEED> and <UPLOAD_SPEED> must be in kbps, mbps
-[CLIENT_CODE] options: qbit-4.0.3, qbit-4.3.2
+[CLIENT_CODE] options: qbit-4.0.3, qbit-4.3.3
 ```
 
 ```
