@@ -26,13 +26,24 @@ type ClientInfo struct {
 	Headers map[string]string `json:"headers"`
 }
 
+type KeyGenerator interface {
+	Key() string
+}
+
+type PeerIdGenerator interface {
+	PeerId() string
+}
+type RoundingGenerator interface {
+	Round(downloadCandidateNextAmount, uploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int)
+}
+
 type Emulation struct {
-	PeerIdGenerator  generator.PeerIdGenerator
-	KeyGenerator     generator.KeyGenerator
+	PeerIdGenerator  PeerIdGenerator
+	KeyGenerator     KeyGenerator
 	Query            string
 	Name             string
 	Headers          map[string]string
-	RoudingGenerator generator.RoundingGenerator
+	RoudingGenerator RoundingGenerator
 }
 
 func NewEmulation(code string) (*Emulation, error) {
@@ -41,17 +52,17 @@ func NewEmulation(code string) (*Emulation, error) {
 		return nil, err
 	}
 
-	peerG, err := generator.NewPeerIdGenerator(c.PeerID.Generator, c.PeerID.Regex)
+	peerG, err := generator.NewRegexPeerIdGenerator(c.PeerID.Generator, c.PeerID.Regex)
 	if err != nil {
 		return nil, err
 	}
 
-	keyG, err := generator.NewKeyGenerator(c.Key.Generator)
+	keyG, err := generator.NewDefaultKeyGenerator(c.Key.Generator)
 	if err != nil {
 		return nil, err
 	}
 
-	roudingG, err := generator.NewRoundingGenerator(c.Rounding.Generator)
+	roudingG, err := generator.NewDefaultRoudingGenerator(c.Rounding.Generator)
 	if err != nil {
 		return nil, err
 	}

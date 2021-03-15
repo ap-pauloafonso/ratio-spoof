@@ -6,11 +6,7 @@ import (
 	"strings"
 )
 
-type KeyGenerator interface {
-	Key() string
-}
-
-func NewKeyGenerator(generatorCode string) (KeyGenerator, error) {
+func NewDefaultKeyGenerator(generatorCode string) (*DefaultKeyGenerator, error) {
 	randomBytes := make([]byte, 4)
 	rand.Read(randomBytes)
 	str := hex.EncodeToString(randomBytes)

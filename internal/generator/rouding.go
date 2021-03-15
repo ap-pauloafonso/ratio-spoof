@@ -1,15 +1,11 @@
 package generator
 
-type RoundingGenerator interface {
-	Round(downloadCandidateNextAmount, uploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int)
-}
+type DefaultRoundingGenerator struct{}
 
-func NewRoundingGenerator(code string) (RoundingGenerator, error) {
+func NewDefaultRoudingGenerator(code string) (*DefaultRoundingGenerator, error) {
 	return &DefaultRoundingGenerator{}, nil
 
 }
-
-type DefaultRoundingGenerator struct{}
 
 func (d *DefaultRoundingGenerator) Round(downloadCandidateNextAmount, uploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int) {
 

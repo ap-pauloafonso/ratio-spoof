@@ -3,7 +3,7 @@ package generator
 import "testing"
 
 func TestNextAmountReport(t *testing.T) {
-	r, _ := NewRoundingGenerator("")
+	r, _ := NewDefaultRoudingGenerator("")
 
 	d, u, l := r.Round(656497856, 46479878, 7879879, 1024)
 	//same
