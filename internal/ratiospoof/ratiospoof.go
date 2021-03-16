@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/tracker"
 	"github.com/gammazero/deque"
@@ -28,7 +29,7 @@ type RatioSpoof struct {
 	TorrentInfo                     *bencode.TorrentInfo
 	Input                           *input.InputParsed
 	Tracker                         *tracker.HttpTracker
-	BitTorrentClient                TorrentClientEmulation
+	BitTorrentClient                *emulation.Emulation
 	AnnounceInterval                int
 	EstimatedTimeToAnnounce         time.Time
 	EstimatedTimeToAnnounceUpdateCh chan int
@@ -39,15 +40,6 @@ type RatioSpoof struct {
 	Status                          string
 	AnnounceHistory                 announceHistory
 	StopPrintCH                     chan interface{}
-}
-
-type TorrentClientEmulation interface {
-	PeerID() string
-	Key() string
-	Query() string
-	Name() string
-	Headers() map[string]string
-	NextAmountReport(DownloadCandidateNextAmount, UploadCandidateNextAmount, leftCandidateNextAmount, pieceSize int) (downloaded, uploaded, left int)
 }
 
 type AnnounceEntry struct {
@@ -62,12 +54,17 @@ type announceHistory struct {
 	deque.Deque
 }
 
-func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulation) (*RatioSpoof, error) {
+func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
 	EstimatedTimeToAnnounceUpdateCh := make(chan int)
 	stopPrintCh := make(chan interface{})
 	dat, err := ioutil.ReadFile(input.TorrentPath)
 	if err != nil {
 		return nil, err
+	}
+
+	client, err := emulation.NewEmulation(input.Client)
+	if err != nil {
+		return nil, errors.New("Error building the emulated client with the code")
 	}
 
 	torrentInfo, err := bencode.TorrentDictParse(dat)
@@ -86,7 +83,7 @@ func NewRatioSpoofState(input input.InputArgs, torrentClient TorrentClientEmulat
 	}
 
 	return &RatioSpoof{
-		BitTorrentClient:                torrentClient,
+		BitTorrentClient:                client,
 		TorrentInfo:                     torrentInfo,
 		Tracker:                         httpTracker,
 		Input:                           inputParsed,
@@ -171,15 +168,15 @@ func (R *RatioSpoof) fireAnnounce(retry bool) error {
 	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
 	replacer := strings.NewReplacer("{infohash}", R.TorrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(R.Input.Port),
-		"{peerid}", R.BitTorrentClient.PeerID(),
+		"{peerid}", R.BitTorrentClient.PeerId(),
 		"{uploaded}", fmt.Sprint(lastAnnounce.Uploaded),
 		"{downloaded}", fmt.Sprint(lastAnnounce.Downloaded),
 		"{left}", fmt.Sprint(lastAnnounce.Left),
 		"{key}", R.BitTorrentClient.Key(),
 		"{event}", R.Status,
 		"{numwant}", fmt.Sprint(R.NumWant))
-	query := replacer.Replace(R.BitTorrentClient.Query())
-	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers(), retry, R.EstimatedTimeToAnnounceUpdateCh)
+	query := replacer.Replace(R.BitTorrentClient.Query)
+	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers, retry, R.EstimatedTimeToAnnounceUpdateCh)
 	if err != nil {
 		log.Fatalf("failed to reach the tracker:\n%s ", err.Error())
 	}
@@ -206,7 +203,7 @@ func (R *RatioSpoof) generateNextAnnounce() {
 
 	leftCandidate := calculateBytesLeft(downloadCandidate, R.TorrentInfo.TotalSize)
 
-	d, u, l := R.BitTorrentClient.NextAmountReport(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
+	d, u, l := R.BitTorrentClient.Round(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
 
 	R.addAnnounce(d, u, l, (float32(d)/float32(R.TorrentInfo.TotalSize))*100)
 }

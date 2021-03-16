@@ -21,6 +21,7 @@ type InputArgs struct {
 	InitialDownloaded string
 	DownloadSpeed     string
 	InitialUploaded   string
+	Client            string
 	UploadSpeed       string
 	Port              int
 	Debug             bool
