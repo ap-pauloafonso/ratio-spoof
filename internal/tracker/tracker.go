@@ -46,7 +46,7 @@ func (T *HttpTracker) SwapFirst(currentIdx int) {
 	T.Urls[currentIdx] = aux
 }
 
-func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, callBack func(int)) (*TrackerResponse, error) {
+func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, callBack func(newEstimatedTimeToAnnounce int)) (*TrackerResponse, error) {
 	defer func() {
 		T.RetryAttempt = 0
 	}()
