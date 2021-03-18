@@ -132,7 +132,6 @@ func (R *RatioSpoof) updateInterval(interval int) {
 	} else {
 		R.AnnounceInterval = 1800
 	}
-	R.AnnounceInterval = 30
 	R.updateEstimatedTimeToAnnounce(R.AnnounceInterval)
 }
 
