@@ -3,13 +3,11 @@ package ratiospoof
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -25,21 +23,19 @@ const (
 )
 
 type RatioSpoof struct {
-	mutex                           *sync.Mutex
-	TorrentInfo                     *bencode.TorrentInfo
-	Input                           *input.InputParsed
-	Tracker                         *tracker.HttpTracker
-	BitTorrentClient                *emulation.Emulation
-	AnnounceInterval                int
-	EstimatedTimeToAnnounce         time.Time
-	EstimatedTimeToAnnounceUpdateCh chan int
-	NumWant                         int
-	Seeders                         int
-	Leechers                        int
-	AnnounceCount                   int
-	Status                          string
-	AnnounceHistory                 announceHistory
-	StopPrintCH                     chan interface{}
+	TorrentInfo             *bencode.TorrentInfo
+	Input                   *input.InputParsed
+	Tracker                 *tracker.HttpTracker
+	BitTorrentClient        *emulation.Emulation
+	AnnounceInterval        int
+	EstimatedTimeToAnnounce time.Time
+	NumWant                 int
+	Seeders                 int
+	Leechers                int
+	AnnounceCount           int
+	Status                  string
+	AnnounceHistory         announceHistory
+	StopPrintCH             chan interface{}
 }
 
 type AnnounceEntry struct {
@@ -55,9 +51,8 @@ type announceHistory struct {
 }
 
 func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
-	EstimatedTimeToAnnounceUpdateCh := make(chan int)
 	stopPrintCh := make(chan interface{})
-	dat, err := ioutil.ReadFile(input.TorrentPath)
+	dat, err := os.ReadFile(input.TorrentPath)
 	if err != nil {
 		return nil, err
 	}
@@ -83,15 +78,13 @@ func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
 	}
 
 	return &RatioSpoof{
-		BitTorrentClient:                client,
-		TorrentInfo:                     torrentInfo,
-		Tracker:                         httpTracker,
-		Input:                           inputParsed,
-		NumWant:                         200,
-		Status:                          "started",
-		mutex:                           &sync.Mutex{},
-		StopPrintCH:                     stopPrintCh,
-		EstimatedTimeToAnnounceUpdateCh: EstimatedTimeToAnnounceUpdateCh,
+		BitTorrentClient: client,
+		TorrentInfo:      torrentInfo,
+		Tracker:          httpTracker,
+		Input:            inputParsed,
+		NumWant:          200,
+		Status:           "started",
+		StopPrintCH:      stopPrintCh,
 	}, nil
 }
 
@@ -117,7 +110,6 @@ func (R *RatioSpoof) Run() {
 
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	R.firstAnnounce()
-	go R.updateEstimatedTimeToAnnounceListener()
 	go func() {
 		for {
 			R.generateNextAnnounce()
@@ -140,20 +132,12 @@ func (R *RatioSpoof) updateInterval(interval int) {
 	} else {
 		R.AnnounceInterval = 1800
 	}
+	R.AnnounceInterval = 30
 	R.updateEstimatedTimeToAnnounce(R.AnnounceInterval)
 }
 
 func (R *RatioSpoof) updateEstimatedTimeToAnnounce(interval int) {
-	R.mutex.Lock()
-	defer R.mutex.Unlock()
 	R.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
-}
-
-func (R *RatioSpoof) updateEstimatedTimeToAnnounceListener() {
-	for {
-		interval := <-R.EstimatedTimeToAnnounceUpdateCh
-		R.updateEstimatedTimeToAnnounce(interval)
-	}
 }
 
 func (R *RatioSpoof) updateSeedersAndLeechers(resp tracker.TrackerResponse) {
@@ -176,7 +160,7 @@ func (R *RatioSpoof) fireAnnounce(retry bool) error {
 		"{event}", R.Status,
 		"{numwant}", fmt.Sprint(R.NumWant))
 	query := replacer.Replace(R.BitTorrentClient.Query)
-	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers, retry, R.EstimatedTimeToAnnounceUpdateCh)
+	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers, retry, R.updateEstimatedTimeToAnnounce)
 	if err != nil {
 		log.Fatalf("failed to reach the tracker:\n%s ", err.Error())
 	}

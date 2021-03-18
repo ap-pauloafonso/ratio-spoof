@@ -3,7 +3,7 @@ package emulation
 import (
 	"embed"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/generator"
 )
@@ -83,7 +83,7 @@ func extractClient(code string) (*ClientInfo, error) {
 	}
 	defer f.Close()
 
-	bytes, err := ioutil.ReadAll(f)
+	bytes, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
