@@ -63,8 +63,8 @@ func TorrentDictParse(dat []byte) (torrent *TorrentInfo, err error) {
 	}, err
 }
 
-func (T *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
-	byteOffsets := T.resultMap["info"].(map[string]interface{})["byte_offsets"].([]int)
+func (t *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
+	byteOffsets := t.resultMap["info"].(map[string]interface{})["byte_offsets"].([]int)
 	h := sha1.New()
 	h.Write([]byte(rawData[byteOffsets[0]:byteOffsets[1]]))
 	ret := h.Sum(nil)
@@ -80,28 +80,28 @@ func (T *torrentDict) extractInfoHashURLEncoded(rawData []byte) string {
 	return buf.String()
 }
 
-func (T *torrentDict) extractTotalSize() int {
-	if value, ok := T.resultMap[torrentInfoKey].(map[string]interface{})[torrentLengthKey]; ok {
+func (t *torrentDict) extractTotalSize() int {
+	if value, ok := t.resultMap[torrentInfoKey].(map[string]interface{})[torrentLengthKey]; ok {
 		return value.(int)
 	}
 	var total int
 
-	for _, file := range T.resultMap[torrentInfoKey].(map[string]interface{})[torrentFilesKey].([]interface{}) {
+	for _, file := range t.resultMap[torrentInfoKey].(map[string]interface{})[torrentFilesKey].([]interface{}) {
 		total += file.(map[string]interface{})[torrentLengthKey].(int)
 	}
 	return total
 }
 
-func (T *torrentDict) extractTrackerInfo() *TrackerInfo {
+func (t *torrentDict) extractTrackerInfo() *TrackerInfo {
 	uniqueUrls := make(map[string]int)
 	currentCount := 0
-	if main, ok := T.resultMap[mainAnnounceKey]; ok {
+	if main, ok := t.resultMap[mainAnnounceKey]; ok {
 		if _, found := uniqueUrls[main.(string)]; !found {
 			uniqueUrls[main.(string)] = currentCount
 			currentCount++
 		}
 	}
-	if list, ok := T.resultMap[announceListKey]; ok {
+	if list, ok := t.resultMap[announceListKey]; ok {
 		for _, innerList := range list.([]interface{}) {
 			for _, item := range innerList.([]interface{}) {
 				if _, found := uniqueUrls[item.(string)]; !found {

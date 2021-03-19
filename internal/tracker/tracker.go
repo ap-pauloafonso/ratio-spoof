@@ -41,34 +41,34 @@ func NewHttpTracker(torrentInfo *bencode.TorrentInfo) (*HttpTracker, error) {
 	return &HttpTracker{Urls: torrentInfo.TrackerInfo.Urls}, nil
 }
 
-func (T *HttpTracker) SwapFirst(currentIdx int) {
-	aux := T.Urls[0]
-	T.Urls[0] = T.Urls[currentIdx]
-	T.Urls[currentIdx] = aux
+func (t *HttpTracker) SwapFirst(currentIdx int) {
+	aux := t.Urls[0]
+	t.Urls[0] = t.Urls[currentIdx]
+	t.Urls[currentIdx] = aux
 }
 
-func (T *HttpTracker) updateEstimatedTimeToAnnounce(interval int) {
-	T.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
+func (t *HttpTracker) updateEstimatedTimeToAnnounce(interval int) {
+	t.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
 }
-func (T *HttpTracker) HandleSuccessfulResponse(resp *TrackerResponse) {
+func (t *HttpTracker) HandleSuccessfulResponse(resp *TrackerResponse) {
 	if resp.Interval <= 0 {
 		resp.Interval = 1800
 	}
 
-	T.updateEstimatedTimeToAnnounce(resp.Interval)
+	t.updateEstimatedTimeToAnnounce(resp.Interval)
 }
 
-func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool) (*TrackerResponse, error) {
+func (t *HttpTracker) Announce(query string, headers map[string]string, retry bool) (*TrackerResponse, error) {
 	defer func() {
-		T.RetryAttempt = 0
+		t.RetryAttempt = 0
 	}()
 	if retry {
 		retryDelay := 30
 		for {
-			trackerResp, err := T.tryMakeRequest(query, headers)
+			trackerResp, err := t.tryMakeRequest(query, headers)
 			if err != nil {
-				T.updateEstimatedTimeToAnnounce(retryDelay)
-				T.RetryAttempt++
+				t.updateEstimatedTimeToAnnounce(retryDelay)
+				t.RetryAttempt++
 				time.Sleep(time.Duration(retryDelay) * time.Second)
 				retryDelay *= 2
 				if retryDelay > 900 {
@@ -76,16 +76,16 @@ func (T *HttpTracker) Announce(query string, headers map[string]string, retry bo
 				}
 				continue
 			}
-			T.HandleSuccessfulResponse(trackerResp)
+			t.HandleSuccessfulResponse(trackerResp)
 			return trackerResp, nil
 		}
 
 	} else {
-		resp, err := T.tryMakeRequest(query, headers)
+		resp, err := t.tryMakeRequest(query, headers)
 		if err != nil {
 			return nil, err
 		}
-		T.HandleSuccessfulResponse(resp)
+		t.HandleSuccessfulResponse(resp)
 		return resp, nil
 	}
 }

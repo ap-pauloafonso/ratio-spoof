@@ -40,25 +40,25 @@ type InputParsed struct {
 var validInitialSufixes = [...]string{"%", "b", "kb", "mb", "gb", "tb"}
 var validSpeedSufixes = [...]string{"kbps", "mbps"}
 
-func (I *InputArgs) ParseInput(torrentInfo *bencode.TorrentInfo) (*InputParsed, error) {
-	downloaded, err := extractInputInitialByteCount(I.InitialDownloaded, torrentInfo.TotalSize, true)
+func (i *InputArgs) ParseInput(torrentInfo *bencode.TorrentInfo) (*InputParsed, error) {
+	downloaded, err := extractInputInitialByteCount(i.InitialDownloaded, torrentInfo.TotalSize, true)
 	if err != nil {
 		return nil, err
 	}
-	uploaded, err := extractInputInitialByteCount(I.InitialUploaded, torrentInfo.TotalSize, false)
+	uploaded, err := extractInputInitialByteCount(i.InitialUploaded, torrentInfo.TotalSize, false)
 	if err != nil {
 		return nil, err
 	}
-	downloadSpeed, err := extractInputByteSpeed(I.DownloadSpeed)
+	downloadSpeed, err := extractInputByteSpeed(i.DownloadSpeed)
 	if err != nil {
 		return nil, err
 	}
-	uploadSpeed, err := extractInputByteSpeed(I.UploadSpeed)
+	uploadSpeed, err := extractInputByteSpeed(i.UploadSpeed)
 	if err != nil {
 		return nil, err
 	}
 
-	if I.Port < minPortNumber || I.Port > maxPortNumber {
+	if i.Port < minPortNumber || i.Port > maxPortNumber {
 		return nil, errors.New(fmt.Sprint("port number must be between %i and %i", minPortNumber, maxPortNumber))
 	}
 
@@ -66,8 +66,8 @@ func (I *InputArgs) ParseInput(torrentInfo *bencode.TorrentInfo) (*InputParsed, 
 		DownloadSpeed:   downloadSpeed,
 		InitialUploaded: uploaded,
 		UploadSpeed:     uploadSpeed,
-		Debug:           I.Debug,
-		Port:            I.Port,
+		Debug:           i.Debug,
+		Port:            i.Port,
 	}, nil
 }
 

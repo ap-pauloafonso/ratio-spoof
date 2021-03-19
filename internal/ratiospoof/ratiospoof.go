@@ -87,94 +87,94 @@ func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
 	}, nil
 }
 
-func (A *announceHistory) pushValueHistory(value AnnounceEntry) {
-	if A.Len() >= maxAnnounceHistory {
-		A.PopFront()
+func (a *announceHistory) pushValueHistory(value AnnounceEntry) {
+	if a.Len() >= maxAnnounceHistory {
+		a.PopFront()
 	}
-	A.PushBack(value)
+	a.PushBack(value)
 }
 
-func (R *RatioSpoof) gracefullyExit() {
+func (r *RatioSpoof) gracefullyExit() {
 	fmt.Printf("\nGracefully exiting...\n")
-	R.Status = "stopped"
-	R.NumWant = 0
-	R.fireAnnounce(false)
+	r.Status = "stopped"
+	r.NumWant = 0
+	r.fireAnnounce(false)
 	fmt.Printf("Gracefully exited successfully.\n")
 
 }
 
-func (R *RatioSpoof) Run() {
+func (r *RatioSpoof) Run() {
 	rand.Seed(time.Now().UnixNano())
 	sigCh := make(chan os.Signal)
 
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	R.firstAnnounce()
+	r.firstAnnounce()
 	go func() {
 		for {
-			R.generateNextAnnounce()
-			time.Sleep(time.Duration(R.AnnounceInterval) * time.Second)
-			R.fireAnnounce(true)
+			r.generateNextAnnounce()
+			time.Sleep(time.Duration(r.AnnounceInterval) * time.Second)
+			r.fireAnnounce(true)
 		}
 	}()
 	<-sigCh
-	R.StopPrintCH <- "exit print"
-	R.gracefullyExit()
+	r.StopPrintCH <- "exit print"
+	r.gracefullyExit()
 }
-func (R *RatioSpoof) firstAnnounce() {
-	R.addAnnounce(R.Input.InitialDownloaded, R.Input.InitialUploaded, calculateBytesLeft(R.Input.InitialDownloaded, R.TorrentInfo.TotalSize), (float32(R.Input.InitialDownloaded)/float32(R.TorrentInfo.TotalSize))*100)
-	R.fireAnnounce(false)
+func (r *RatioSpoof) firstAnnounce() {
+	r.addAnnounce(r.Input.InitialDownloaded, r.Input.InitialUploaded, calculateBytesLeft(r.Input.InitialDownloaded, r.TorrentInfo.TotalSize), (float32(r.Input.InitialDownloaded)/float32(r.TorrentInfo.TotalSize))*100)
+	r.fireAnnounce(false)
 }
 
-func (R *RatioSpoof) updateSeedersAndLeechers(resp tracker.TrackerResponse) {
-	R.Seeders = resp.Seeders
-	R.Leechers = resp.Leechers
+func (r *RatioSpoof) updateSeedersAndLeechers(resp tracker.TrackerResponse) {
+	r.Seeders = resp.Seeders
+	r.Leechers = resp.Leechers
 }
-func (R *RatioSpoof) addAnnounce(currentDownloaded, currentUploaded, currentLeft int, percentDownloaded float32) {
-	R.AnnounceCount++
-	R.AnnounceHistory.pushValueHistory(AnnounceEntry{Count: R.AnnounceCount, Downloaded: currentDownloaded, Uploaded: currentUploaded, Left: currentLeft, PercentDownloaded: percentDownloaded})
+func (r *RatioSpoof) addAnnounce(currentDownloaded, currentUploaded, currentLeft int, percentDownloaded float32) {
+	r.AnnounceCount++
+	r.AnnounceHistory.pushValueHistory(AnnounceEntry{Count: r.AnnounceCount, Downloaded: currentDownloaded, Uploaded: currentUploaded, Left: currentLeft, PercentDownloaded: percentDownloaded})
 }
-func (R *RatioSpoof) fireAnnounce(retry bool) error {
-	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
-	replacer := strings.NewReplacer("{infohash}", R.TorrentInfo.InfoHashURLEncoded,
-		"{port}", fmt.Sprint(R.Input.Port),
-		"{peerid}", R.BitTorrentClient.PeerId(),
+func (r *RatioSpoof) fireAnnounce(retry bool) error {
+	lastAnnounce := r.AnnounceHistory.Back().(AnnounceEntry)
+	replacer := strings.NewReplacer("{infohash}", r.TorrentInfo.InfoHashURLEncoded,
+		"{port}", fmt.Sprint(r.Input.Port),
+		"{peerid}", r.BitTorrentClient.PeerId(),
 		"{uploaded}", fmt.Sprint(lastAnnounce.Uploaded),
 		"{downloaded}", fmt.Sprint(lastAnnounce.Downloaded),
 		"{left}", fmt.Sprint(lastAnnounce.Left),
-		"{key}", R.BitTorrentClient.Key(),
-		"{event}", R.Status,
-		"{numwant}", fmt.Sprint(R.NumWant))
-	query := replacer.Replace(R.BitTorrentClient.Query)
-	trackerResp, err := R.Tracker.Announce(query, R.BitTorrentClient.Headers, retry)
+		"{key}", r.BitTorrentClient.Key(),
+		"{event}", r.Status,
+		"{numwant}", fmt.Sprint(r.NumWant))
+	query := replacer.Replace(r.BitTorrentClient.Query)
+	trackerResp, err := r.Tracker.Announce(query, r.BitTorrentClient.Headers, retry)
 	if err != nil {
 		log.Fatalf("failed to reach the tracker:\n%s ", err.Error())
 	}
 
 	if trackerResp != nil {
-		R.updateSeedersAndLeechers(*trackerResp)
-		R.AnnounceInterval = trackerResp.Interval
+		r.updateSeedersAndLeechers(*trackerResp)
+		r.AnnounceInterval = trackerResp.Interval
 	}
 	return nil
 }
-func (R *RatioSpoof) generateNextAnnounce() {
-	lastAnnounce := R.AnnounceHistory.Back().(AnnounceEntry)
+func (r *RatioSpoof) generateNextAnnounce() {
+	lastAnnounce := r.AnnounceHistory.Back().(AnnounceEntry)
 	currentDownloaded := lastAnnounce.Downloaded
 	var downloadCandidate int
 
-	if currentDownloaded < R.TorrentInfo.TotalSize {
-		downloadCandidate = calculateNextTotalSizeByte(R.Input.DownloadSpeed, currentDownloaded, R.TorrentInfo.PieceSize, R.AnnounceInterval, R.TorrentInfo.TotalSize)
+	if currentDownloaded < r.TorrentInfo.TotalSize {
+		downloadCandidate = calculateNextTotalSizeByte(r.Input.DownloadSpeed, currentDownloaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, r.TorrentInfo.TotalSize)
 	} else {
-		downloadCandidate = R.TorrentInfo.TotalSize
+		downloadCandidate = r.TorrentInfo.TotalSize
 	}
 
 	currentUploaded := lastAnnounce.Uploaded
-	uploadCandidate := calculateNextTotalSizeByte(R.Input.UploadSpeed, currentUploaded, R.TorrentInfo.PieceSize, R.AnnounceInterval, 0)
+	uploadCandidate := calculateNextTotalSizeByte(r.Input.UploadSpeed, currentUploaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, 0)
 
-	leftCandidate := calculateBytesLeft(downloadCandidate, R.TorrentInfo.TotalSize)
+	leftCandidate := calculateBytesLeft(downloadCandidate, r.TorrentInfo.TotalSize)
 
-	d, u, l := R.BitTorrentClient.Round(downloadCandidate, uploadCandidate, leftCandidate, R.TorrentInfo.PieceSize)
+	d, u, l := r.BitTorrentClient.Round(downloadCandidate, uploadCandidate, leftCandidate, r.TorrentInfo.PieceSize)
 
-	R.addAnnounce(d, u, l, (float32(d)/float32(R.TorrentInfo.TotalSize))*100)
+	r.addAnnounce(d, u, l, (float32(d)/float32(r.TorrentInfo.TotalSize))*100)
 }
 
 func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
