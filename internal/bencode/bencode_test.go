@@ -1,8 +1,8 @@
 package bencode
 
 import (
-	"io/ioutil"
 	"log"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -99,13 +99,13 @@ func TestMapParse(T *testing.T) {
 
 func TestDecode(T *testing.T) {
 
-	files, err := ioutil.ReadDir("./torrent_files_test")
+	files, err := os.ReadDir("./torrent_files_test")
 	if err != nil {
 		log.Fatal(err)
 	}
 	for _, f := range files {
 		T.Run(f.Name(), func(t *testing.T) {
-			data, _ := ioutil.ReadFile("./torrent_files_test/" + f.Name())
+			data, _ := os.ReadFile("./torrent_files_test/" + f.Name())
 			result, _ := Decode(data)
 			t.Log(result["info"].(map[string]interface{})["name"])
 		})

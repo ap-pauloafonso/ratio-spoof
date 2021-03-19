@@ -63,7 +63,7 @@ func PrintState(state *ratiospoof.RatioSpoof) {
 			}
 			lastDequeItem := state.AnnounceHistory.At(state.AnnounceHistory.Len() - 1).(ratiospoof.AnnounceEntry)
 
-			remaining := time.Until(state.EstimatedTimeToAnnounce)
+			remaining := time.Until(state.Tracker.EstimatedTimeToAnnounce)
 			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.Count,
 				humanReadableSize(float64(lastDequeItem.Downloaded)),
 				lastDequeItem.PercentDownloaded,

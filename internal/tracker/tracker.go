@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -13,10 +13,11 @@ import (
 )
 
 type HttpTracker struct {
-	Urls               []string
-	RetryAttempt       int
-	LastAnounceRequest string
-	LastTackerResponse string
+	Urls                    []string
+	RetryAttempt            int
+	LastAnounceRequest      string
+	LastTackerResponse      string
+	EstimatedTimeToAnnounce time.Time
 }
 
 type TrackerResponse struct {
@@ -40,23 +41,34 @@ func NewHttpTracker(torrentInfo *bencode.TorrentInfo) (*HttpTracker, error) {
 	return &HttpTracker{Urls: torrentInfo.TrackerInfo.Urls}, nil
 }
 
-func (T *HttpTracker) SwapFirst(currentIdx int) {
-	aux := T.Urls[0]
-	T.Urls[0] = T.Urls[currentIdx]
-	T.Urls[currentIdx] = aux
+func (t *HttpTracker) SwapFirst(currentIdx int) {
+	aux := t.Urls[0]
+	t.Urls[0] = t.Urls[currentIdx]
+	t.Urls[currentIdx] = aux
 }
 
-func (T *HttpTracker) Announce(query string, headers map[string]string, retry bool, estimatedTimeToAnnounceUpdateCh chan<- int) (*TrackerResponse, error) {
+func (t *HttpTracker) updateEstimatedTimeToAnnounce(interval int) {
+	t.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
+}
+func (t *HttpTracker) HandleSuccessfulResponse(resp *TrackerResponse) {
+	if resp.Interval <= 0 {
+		resp.Interval = 1800
+	}
+
+	t.updateEstimatedTimeToAnnounce(resp.Interval)
+}
+
+func (t *HttpTracker) Announce(query string, headers map[string]string, retry bool) (*TrackerResponse, error) {
 	defer func() {
-		T.RetryAttempt = 0
+		t.RetryAttempt = 0
 	}()
 	if retry {
 		retryDelay := 30
 		for {
-			trackerResp, err := T.tryMakeRequest(query, headers)
+			trackerResp, err := t.tryMakeRequest(query, headers)
 			if err != nil {
-				estimatedTimeToAnnounceUpdateCh <- retryDelay
-				T.RetryAttempt++
+				t.updateEstimatedTimeToAnnounce(retryDelay)
+				t.RetryAttempt++
 				time.Sleep(time.Duration(retryDelay) * time.Second)
 				retryDelay *= 2
 				if retryDelay > 900 {
@@ -64,14 +76,16 @@ func (T *HttpTracker) Announce(query string, headers map[string]string, retry bo
 				}
 				continue
 			}
+			t.HandleSuccessfulResponse(trackerResp)
 			return trackerResp, nil
 		}
 
 	} else {
-		resp, err := T.tryMakeRequest(query, headers)
+		resp, err := t.tryMakeRequest(query, headers)
 		if err != nil {
 			return nil, err
 		}
+		t.HandleSuccessfulResponse(resp)
 		return resp, nil
 	}
 }
@@ -87,14 +101,14 @@ func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) (*
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
-				bytesR, _ := ioutil.ReadAll(resp.Body)
+				bytesR, _ := io.ReadAll(resp.Body)
 				if len(bytesR) == 0 {
 					continue
 				}
 				mimeType := http.DetectContentType(bytesR)
 				if mimeType == "application/x-gzip" {
 					gzipReader, _ := gzip.NewReader(bytes.NewReader(bytesR))
-					bytesR, _ = ioutil.ReadAll(gzipReader)
+					bytesR, _ = io.ReadAll(gzipReader)
 					gzipReader.Close()
 				}
 				t.LastTackerResponse = string(bytesR)
