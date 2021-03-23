@@ -41,7 +41,7 @@ func NewHttpTracker(torrentInfo *bencode.TorrentInfo) (*HttpTracker, error) {
 	return &HttpTracker{Urls: torrentInfo.TrackerInfo.Urls}, nil
 }
 
-func (t *HttpTracker) SwapFirst(currentIdx int) {
+func (t *HttpTracker) swapFirst(currentIdx int) {
 	aux := t.Urls[0]
 	t.Urls[0] = t.Urls[currentIdx]
 	t.Urls[currentIdx] = aux
@@ -50,7 +50,7 @@ func (t *HttpTracker) SwapFirst(currentIdx int) {
 func (t *HttpTracker) updateEstimatedTimeToAnnounce(interval int) {
 	t.EstimatedTimeToAnnounce = time.Now().Add(time.Duration(interval) * time.Second)
 }
-func (t *HttpTracker) HandleSuccessfulResponse(resp *TrackerResponse) {
+func (t *HttpTracker) handleSuccessfulResponse(resp *TrackerResponse) {
 	if resp.Interval <= 0 {
 		resp.Interval = 1800
 	}
@@ -76,7 +76,7 @@ func (t *HttpTracker) Announce(query string, headers map[string]string, retry bo
 				}
 				continue
 			}
-			t.HandleSuccessfulResponse(trackerResp)
+			t.handleSuccessfulResponse(trackerResp)
 			return trackerResp, nil
 		}
 
@@ -85,7 +85,7 @@ func (t *HttpTracker) Announce(query string, headers map[string]string, retry bo
 		if err != nil {
 			return nil, err
 		}
-		t.HandleSuccessfulResponse(resp)
+		t.handleSuccessfulResponse(resp)
 		return resp, nil
 	}
 }
@@ -121,7 +121,7 @@ func (t *HttpTracker) tryMakeRequest(query string, headers map[string]string) (*
 					continue
 				}
 				if idx != 0 {
-					t.SwapFirst(idx)
+					t.swapFirst(idx)
 				}
 
 				return &ret, nil

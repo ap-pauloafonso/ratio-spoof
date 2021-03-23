@@ -13,14 +13,8 @@ import (
 )
 
 func PrintState(state *ratiospoof.RatioSpoof) {
-	exit := false
-	go func() {
-		_ = <-state.StopPrintCH
-		exit = true
-	}()
-
 	for {
-		if exit {
+		if !state.Print {
 			break
 		}
 		width := terminalSize()

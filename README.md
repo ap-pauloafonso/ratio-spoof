@@ -49,7 +49,7 @@ required arguments:
 Depends wether you use it carefuly, Its a hard task to catch cheaters, but if you start uploading crazy amounts out of nowhere or seeding something with no active leecher on the swarm you may be in risk.
 
 ## Bittorrent client supported 
-The currently emulation is hard coded to be a popular and accepted client qbittorrent v4.0.3. 
+The default client emulation is qbittorrent v4.0.3, however you can change it by using the -c argument
 
 ## Resources
 http://www.bittorrent.org/beps/bep_0003.html

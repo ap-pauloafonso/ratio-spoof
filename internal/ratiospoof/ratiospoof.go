@@ -34,7 +34,7 @@ type RatioSpoof struct {
 	AnnounceCount    int
 	Status           string
 	AnnounceHistory  announceHistory
-	StopPrintCH      chan interface{}
+	Print            bool
 }
 
 type AnnounceEntry struct {
@@ -50,7 +50,6 @@ type announceHistory struct {
 }
 
 func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
-	stopPrintCh := make(chan interface{})
 	dat, err := os.ReadFile(input.TorrentPath)
 	if err != nil {
 		return nil, err
@@ -83,7 +82,7 @@ func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
 		Input:            inputParsed,
 		NumWant:          200,
 		Status:           "started",
-		StopPrintCH:      stopPrintCh,
+		Print:            true,
 	}, nil
 }
 
@@ -117,7 +116,7 @@ func (r *RatioSpoof) Run() {
 		}
 	}()
 	<-sigCh
-	r.StopPrintCH <- "exit print"
+	r.Print = false
 	r.gracefullyExit()
 }
 func (r *RatioSpoof) firstAnnounce() {
