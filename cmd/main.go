@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/printer"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
 )
 
@@ -68,8 +67,6 @@ required arguments:
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	go printer.PrintState(r)
 	r.Run()
 
 }

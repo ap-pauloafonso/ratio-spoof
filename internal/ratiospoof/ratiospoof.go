@@ -14,6 +14,7 @@ import (
 	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
+	"github.com/ap-pauloafonso/ratio-spoof/internal/printer"
 	"github.com/ap-pauloafonso/ratio-spoof/internal/tracker"
 	"github.com/gammazero/deque"
 )
@@ -34,15 +35,6 @@ type RatioSpoof struct {
 	AnnounceCount    int
 	Status           string
 	AnnounceHistory  announceHistory
-	Print            bool
-}
-
-type AnnounceEntry struct {
-	Count             int
-	Downloaded        int
-	PercentDownloaded float32
-	Uploaded          int
-	Left              int
 }
 
 type announceHistory struct {
@@ -82,11 +74,16 @@ func NewRatioSpoofState(input input.InputArgs) (*RatioSpoof, error) {
 		Input:            inputParsed,
 		NumWant:          200,
 		Status:           "started",
-		Print:            true,
 	}, nil
 }
 
-func (a *announceHistory) pushValueHistory(value AnnounceEntry) {
+func (a *announceHistory) pushValueHistory(value struct {
+	Count             int
+	Downloaded        int
+	PercentDownloaded float32
+	Uploaded          int
+	Left              int
+}) {
 	if a.Len() >= maxAnnounceHistory {
 		a.PopFront()
 	}
@@ -108,6 +105,9 @@ func (r *RatioSpoof) Run() {
 
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	r.firstAnnounce()
+
+	p := printer.NewPrinter(&r.AnnounceCount, &r.Seeders, &r.Leechers, &r.Tracker.RetryAttempt, &r.Input.DownloadSpeed, &r.Input.UploadSpeed, &r.Input.Port, &r.TorrentInfo.TotalSize, &r.TorrentInfo.Name, &r.TorrentInfo.TrackerInfo.Main, &r.BitTorrentClient.Name, &r.Tracker.LastAnounceRequest, &r.Tracker.LastTackerResponse, &r.Input.Debug, &r.Tracker.EstimatedTimeToAnnounce, &r.AnnounceHistory.Deque)
+	p.Start()
 	go func() {
 		for {
 			r.generateNextAnnounce()
@@ -116,7 +116,7 @@ func (r *RatioSpoof) Run() {
 		}
 	}()
 	<-sigCh
-	r.Print = false
+	p.Stop()
 	r.gracefullyExit()
 }
 func (r *RatioSpoof) firstAnnounce() {
@@ -130,10 +130,26 @@ func (r *RatioSpoof) updateSeedersAndLeechers(resp tracker.TrackerResponse) {
 }
 func (r *RatioSpoof) addAnnounce(currentDownloaded, currentUploaded, currentLeft int, percentDownloaded float32) {
 	r.AnnounceCount++
-	r.AnnounceHistory.pushValueHistory(AnnounceEntry{Count: r.AnnounceCount, Downloaded: currentDownloaded, Uploaded: currentUploaded, Left: currentLeft, PercentDownloaded: percentDownloaded})
+	r.AnnounceHistory.pushValueHistory(struct {
+		Count             int
+		Downloaded        int
+		PercentDownloaded float32
+		Uploaded          int
+		Left              int
+	}{Count: r.AnnounceCount,
+		Downloaded:        currentDownloaded,
+		Uploaded:          currentUploaded,
+		Left:              currentLeft,
+		PercentDownloaded: percentDownloaded})
 }
 func (r *RatioSpoof) fireAnnounce(retry bool) error {
-	lastAnnounce := r.AnnounceHistory.Back().(AnnounceEntry)
+	lastAnnounce := r.AnnounceHistory.Back().(struct {
+		Count             int
+		Downloaded        int
+		PercentDownloaded float32
+		Uploaded          int
+		Left              int
+	})
 	replacer := strings.NewReplacer("{infohash}", r.TorrentInfo.InfoHashURLEncoded,
 		"{port}", fmt.Sprint(r.Input.Port),
 		"{peerid}", r.BitTorrentClient.PeerId(),
@@ -156,7 +172,13 @@ func (r *RatioSpoof) fireAnnounce(retry bool) error {
 	return nil
 }
 func (r *RatioSpoof) generateNextAnnounce() {
-	lastAnnounce := r.AnnounceHistory.Back().(AnnounceEntry)
+	lastAnnounce := r.AnnounceHistory.Back().(struct {
+		Count             int
+		Downloaded        int
+		PercentDownloaded float32
+		Uploaded          int
+		Left              int
+	})
 	currentDownloaded := lastAnnounce.Downloaded
 	var downloadCandidate int
 

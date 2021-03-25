@@ -8,73 +8,126 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
+	"github.com/gammazero/deque"
 	"github.com/olekukonko/ts"
 )
 
-func PrintState(state *ratiospoof.RatioSpoof) {
-	for {
-		if !state.Print {
-			break
-		}
-		width := terminalSize()
-		clear()
+type Printer struct {
+	announceCount           *int
+	seeders                 *int
+	leechers                *int
+	retryAttempt            *int
+	downloadSpeed           *int
+	uploadSpeed             *int
+	port                    *int
+	totalSize               *int
+	emulation               *string
+	torrentName             *string
+	tracker                 *string
+	lastAnnounceRequest     *string
+	lastAnnounceResponse    *string
+	debug                   *bool
+	estimatedTimeToAnnounce *time.Time
+	announceHistory         *deque.Deque
+	print                   bool
+}
 
-		if state.AnnounceCount == 1 {
-			println("Trying to connect to the tracker...")
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		if state.AnnounceHistory.Len() > 0 {
-			seedersStr := fmt.Sprint(state.Seeders)
-			leechersStr := fmt.Sprint(state.Leechers)
-			if state.Seeders == 0 {
-				seedersStr = "not informed"
-			}
+func NewPrinter(announceCount, seeders, leechers, retryAttempt, downloadSpeed, uploadSpeed, port, totalSize *int,
+	torrentName, tracker, emulation, lastAnnounceRequest, lastAnnounceResponse *string,
+	debug *bool,
+	estimatedTimeToAnnounce *time.Time,
+	announceHistory *deque.Deque) *Printer {
 
-			if state.Leechers == 0 {
-				leechersStr = "not informed"
-			}
-			var retryStr string
-			if state.Tracker.RetryAttempt > 0 {
-				retryStr = fmt.Sprintf("(*Retry %v - check your connection)", state.Tracker.RetryAttempt)
-			}
-			fmt.Printf("%s\n", center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
-			fmt.Printf(`
-	Torrent: %v
-	Tracker: %v
-	Seeders: %v
-	Leechers:%v
-	Download Speed: %v/s
-	Upload Speed: %v/s
-	Size: %v
-	Emulation: %v | Port: %v`, state.TorrentInfo.Name, state.TorrentInfo.TrackerInfo.Main, seedersStr, leechersStr, humanReadableSize(float64(state.Input.DownloadSpeed)),
-				humanReadableSize(float64(state.Input.UploadSpeed)), humanReadableSize(float64(state.TorrentInfo.TotalSize)), state.BitTorrentClient.Name, state.Input.Port)
-			fmt.Printf("\n\n%s\n\n", center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
-			for i := 0; i <= state.AnnounceHistory.Len()-2; i++ {
-				dequeItem := state.AnnounceHistory.At(i).(ratiospoof.AnnounceEntry)
-				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced\n", dequeItem.Count, humanReadableSize(float64(dequeItem.Downloaded)), dequeItem.PercentDownloaded, humanReadableSize(float64(dequeItem.Left)), humanReadableSize(float64(dequeItem.Uploaded)))
-			}
-			lastDequeItem := state.AnnounceHistory.At(state.AnnounceHistory.Len() - 1).(ratiospoof.AnnounceEntry)
-
-			remaining := time.Until(state.Tracker.EstimatedTimeToAnnounce)
-			fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.Count,
-				humanReadableSize(float64(lastDequeItem.Downloaded)),
-				lastDequeItem.PercentDownloaded,
-				humanReadableSize(float64(lastDequeItem.Left)),
-				humanReadableSize(float64(lastDequeItem.Uploaded)),
-				fmtDuration(remaining),
-				retryStr)
-
-			if state.Input.Debug {
-				fmt.Printf("\n%s\n", center("  DEBUG  ", width-len("  DEBUG  "), "#"))
-				fmt.Printf("\n%s\n\n%s", state.Tracker.LastAnounceRequest, state.Tracker.LastTackerResponse)
-			}
-			time.Sleep(1 * time.Second)
-		}
+	return &Printer{print: true,
+		announceCount: announceCount, seeders: seeders, leechers: leechers, retryAttempt: retryAttempt, downloadSpeed: downloadSpeed, uploadSpeed: uploadSpeed, port: port, totalSize: totalSize,
+		torrentName: torrentName, tracker: tracker, emulation: emulation, lastAnnounceRequest: lastAnnounceRequest,
+		lastAnnounceResponse: lastAnnounceResponse, debug: debug, estimatedTimeToAnnounce: estimatedTimeToAnnounce, announceHistory: announceHistory,
 	}
 }
 
+func (p *Printer) Start() {
+	go func() {
+		for {
+			if !p.print {
+				break
+			}
+
+			width := terminalSize()
+			clear()
+
+			if *p.announceCount == 1 {
+				println("Trying to connect to the tracker...")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			if p.announceHistory.Len() > 0 {
+				seedersStr := fmt.Sprint(*p.seeders)
+				leechersStr := fmt.Sprint(*p.leechers)
+				if *p.seeders == 0 {
+					seedersStr = "not informed"
+				}
+
+				if *p.leechers == 0 {
+					leechersStr = "not informed"
+				}
+				var retryStr string
+				if *p.retryAttempt > 0 {
+					retryStr = fmt.Sprintf("(*Retry %v - check your connection)", *p.retryAttempt)
+				}
+				fmt.Printf("%s\n", center("  RATIO-SPOOF  ", width-len("  RATIO-SPOOF  "), "#"))
+				fmt.Printf(`
+		Torrent: %v
+		Tracker: %v
+		Seeders: %v
+		Leechers:%v
+		Download Speed: %v/s
+		Upload Speed: %v/s
+		Size: %v
+		Emulation: %v | Port: %v`, *p.torrentName, *p.tracker, seedersStr, leechersStr, humanReadableSize(float64(*p.downloadSpeed)),
+					humanReadableSize(float64(*p.uploadSpeed)), humanReadableSize(float64(*p.totalSize)), *p.emulation, *p.port)
+				fmt.Printf("\n\n%s\n\n", center("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  ", width-len("  GITHUB.COM/AP-PAULOAFONSO/RATIO-SPOOF  "), "#"))
+				for i := 0; i <= p.announceHistory.Len()-2; i++ {
+					dequeItem := p.announceHistory.At(i).(struct {
+						Count             int
+						Downloaded        int
+						PercentDownloaded float32
+						Uploaded          int
+						Left              int
+					})
+					fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | announced\n", dequeItem.Count, humanReadableSize(float64(dequeItem.Downloaded)), dequeItem.PercentDownloaded, humanReadableSize(float64(dequeItem.Left)), humanReadableSize(float64(dequeItem.Uploaded)))
+				}
+				lastDequeItem := p.announceHistory.At(p.announceHistory.Len() - 1).(struct {
+					Count             int
+					Downloaded        int
+					PercentDownloaded float32
+					Uploaded          int
+					Left              int
+				})
+
+				remaining := time.Until(*p.estimatedTimeToAnnounce)
+				fmt.Printf("#%v downloaded: %v(%.2f%%) | left: %v | uploaded: %v | next announce in: %v %v\n", lastDequeItem.Count,
+					humanReadableSize(float64(lastDequeItem.Downloaded)),
+					lastDequeItem.PercentDownloaded,
+					humanReadableSize(float64(lastDequeItem.Left)),
+					humanReadableSize(float64(lastDequeItem.Uploaded)),
+					fmtDuration(remaining),
+					retryStr)
+
+				if *p.debug {
+					fmt.Printf("\n%s\n", center("  DEBUG  ", width-len("  DEBUG  "), "#"))
+					fmt.Printf("\n%s\n\n%s", *p.lastAnnounceRequest, *p.lastAnnounceResponse)
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}
+
+	}()
+
+}
+
+func (p *Printer) Stop() {
+	p.print = false
+}
 func terminalSize() int {
 	size, _ := ts.GetSize()
 	width := size.Col()
