@@ -1,5 +1,5 @@
 test:
-	go test ./... --cover
+	go test ./... -count=1 --cover
 
 torrent-test:
 	go run main.go -c qbit-4.3.3 -t bencode/torrent_files_test/debian-12.0.0-amd64-DVD-1.iso.torrent -d 0% -ds 100kbps -u 0% -us 100kbps
