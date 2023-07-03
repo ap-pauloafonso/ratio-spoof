@@ -2,13 +2,13 @@ package printer
 
 import (
 	"fmt"
+	"github.com/ap-pauloafonso/ratio-spoof/ratiospoof"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
 	"github.com/olekukonko/ts"
 )
 

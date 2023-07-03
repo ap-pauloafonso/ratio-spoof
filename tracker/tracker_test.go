@@ -1,10 +1,9 @@
 package tracker
 
 import (
+	"github.com/ap-pauloafonso/ratio-spoof/bencode"
 	"reflect"
 	"testing"
-
-	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 )
 
 func TestNewHttpTracker(t *testing.T) {

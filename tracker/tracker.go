@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"github.com/ap-pauloafonso/ratio-spoof/bencode"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 )
 
 type HttpTracker struct {

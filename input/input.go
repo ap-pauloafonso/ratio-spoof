@@ -3,11 +3,10 @@ package input
 import (
 	"errors"
 	"fmt"
+	"github.com/ap-pauloafonso/ratio-spoof/bencode"
 	"math"
 	"strconv"
 	"strings"
-
-	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
 )
 
 const (
@@ -95,7 +94,7 @@ func extractInputInitialByteCount(initialSizeInput string, totalBytes int, error
 	return byteCount, nil
 }
 
-//Takes an dirty speed input and returns the bytes per second based on the suffixes
+// Takes an dirty speed input and returns the bytes per second based on the suffixes
 // example 1kbps(string) > 1024 bytes per second (int)
 func extractInputByteSpeed(initialSpeedInput string) (int, error) {
 	ok, suffix := checkSpeedSufix(initialSpeedInput)

@@ -54,5 +54,5 @@ The default client emulation is qbittorrent v4.0.3, however you can change it by
 ## Resources
 http://www.bittorrent.org/beps/bep_0003.html
 
-https://wiki.theory.org/index.php/BitTorrentSpecification
+https://wiki.theory.org/BitTorrentSpecification
 

@@ -3,6 +3,10 @@ package ratiospoof
 import (
 	"errors"
 	"fmt"
+	"github.com/ap-pauloafonso/ratio-spoof/bencode"
+	"github.com/ap-pauloafonso/ratio-spoof/emulation"
+	"github.com/ap-pauloafonso/ratio-spoof/input"
+	"github.com/ap-pauloafonso/ratio-spoof/tracker"
 	"log"
 	"math/rand"
 	"os"
@@ -11,10 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ap-pauloafonso/ratio-spoof/internal/bencode"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/emulation"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/tracker"
 	"github.com/gammazero/deque"
 )
 
@@ -103,7 +103,6 @@ func (r *RatioSpoof) gracefullyExit() {
 }
 
 func (r *RatioSpoof) Run() {
-	rand.Seed(time.Now().UnixNano())
 	sigCh := make(chan os.Signal)
 
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -161,13 +160,15 @@ func (r *RatioSpoof) generateNextAnnounce() {
 	var downloadCandidate int
 
 	if currentDownloaded < r.TorrentInfo.TotalSize {
-		downloadCandidate = calculateNextTotalSizeByte(r.Input.DownloadSpeed, currentDownloaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, r.TorrentInfo.TotalSize)
+		randomPiecesDownload := rand.Intn(10-1) + 1
+		downloadCandidate = calculateNextTotalSizeByte(r.Input.DownloadSpeed, currentDownloaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, r.TorrentInfo.TotalSize, randomPiecesDownload)
 	} else {
 		downloadCandidate = r.TorrentInfo.TotalSize
 	}
 
 	currentUploaded := lastAnnounce.Uploaded
-	uploadCandidate := calculateNextTotalSizeByte(r.Input.UploadSpeed, currentUploaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, 0)
+	randomPiecesUpload := rand.Intn(10-1) + 1
+	uploadCandidate := calculateNextTotalSizeByte(r.Input.UploadSpeed, currentUploaded, r.TorrentInfo.PieceSize, r.AnnounceInterval, 0, randomPiecesUpload)
 
 	leftCandidate := calculateBytesLeft(downloadCandidate, r.TorrentInfo.TotalSize)
 
@@ -176,12 +177,11 @@ func (r *RatioSpoof) generateNextAnnounce() {
 	r.addAnnounce(d, u, l, (float32(d)/float32(r.TorrentInfo.TotalSize))*100)
 }
 
-func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes int) int {
+func calculateNextTotalSizeByte(speedBytePerSecond, currentByte, pieceSizeByte, seconds, limitTotalBytes, randomPieces int) int {
 	if speedBytePerSecond == 0 {
 		return currentByte
 	}
 	totalCandidate := currentByte + (speedBytePerSecond * seconds)
-	randomPieces := rand.Intn(10-1) + 1
 	totalCandidate = totalCandidate + (pieceSizeByte * randomPieces)
 
 	if limitTotalBytes != 0 && totalCandidate > limitTotalBytes {

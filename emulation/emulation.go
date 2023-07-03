@@ -3,9 +3,8 @@ package emulation
 import (
 	"embed"
 	"encoding/json"
+	generator2 "github.com/ap-pauloafonso/ratio-spoof/generator"
 	"io"
-
-	"github.com/ap-pauloafonso/ratio-spoof/internal/generator"
 )
 
 type ClientInfo struct {
@@ -52,17 +51,17 @@ func NewEmulation(code string) (*Emulation, error) {
 		return nil, err
 	}
 
-	peerG, err := generator.NewRegexPeerIdGenerator(c.PeerID.Regex)
+	peerG, err := generator2.NewRegexPeerIdGenerator(c.PeerID.Regex)
 	if err != nil {
 		return nil, err
 	}
 
-	keyG, err := generator.NewDefaultKeyGenerator()
+	keyG, err := generator2.NewDefaultKeyGenerator()
 	if err != nil {
 		return nil, err
 	}
 
-	roudingG, err := generator.NewDefaultRoudingGenerator()
+	roudingG, err := generator2.NewDefaultRoudingGenerator()
 	if err != nil {
 		return nil, err
 	}

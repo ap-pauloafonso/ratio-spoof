@@ -3,12 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/ap-pauloafonso/ratio-spoof/input"
+	"github.com/ap-pauloafonso/ratio-spoof/printer"
+	"github.com/ap-pauloafonso/ratio-spoof/ratiospoof"
 	"log"
 	"os"
-
-	"github.com/ap-pauloafonso/ratio-spoof/internal/input"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/printer"
-	"github.com/ap-pauloafonso/ratio-spoof/internal/ratiospoof"
 )
 
 func main() {
